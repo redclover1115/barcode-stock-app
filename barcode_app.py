@@ -77,7 +77,7 @@ with st.form(key="stock_form", clear_on_submit=True):
         jan_code = st.text_input("📦 JANコード（カメラ読取値）", value=scanned_jan, max_chars=13)
     
     # 追加・登録する個数
-    count = st.number_input("🔢 追加する在庫数", min_value=1, value=1, step=1)
+    count = st.number_input("🔢 現在庫数（実数を入力して上書き）", min_value=0, value=0, step=1)
     
     # 送信ボタン
     submit_button = st.form_submit_button(label="🚀 在庫データを更新する")
