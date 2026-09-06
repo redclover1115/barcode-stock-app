@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
-import cv2
-import numpy as np
+from pyzbar.pyzbar import decode
+from PIL import Image
 
 # 💡 吉本さんのGoogleウェブアプリのURL
 GAS_URL = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN34zs2XxREaCe64GI-1uthsF7qzn89fh36J0FH1/exec"
@@ -46,33 +46,32 @@ st.markdown("---")
 # スキャンされたJANコードを保持する変数
 scanned_jan = ""
 
-# --- 選択肢①：携帯カメラで読み取る場合（超安定版：st.camera_input方式） ---
+# --- 選択肢①：携帯カメラで読み取る場合（pyzbar高精度解析方式） ---
 if scan_method == "📷 携帯のカメラで読み取る":
-    st.write("👇 「写真を撮る」を押してバーコードをパシャッと撮影してください")
+    st.write("👇 「ファイルを撮影」などを押してバーコードをパシャッと撮影してください")
     
-    # Streamlit標準の、最もエラーが起きない超安定カメラ機能を起動
+    # 最もエラーの起きない超安定カメラ機能を起動
     img_file = st.camera_input("バーコードを撮影", label_visibility="collapsed")
     
     if img_file is not None:
-        # 撮影された画像をシステムが読み解く処理
-        file_bytes = np.asarray(bytearray(img_file.read()), dtype=np.uint8)
-        opencv_img = cv2.imdecode(file_bytes, 1)
+        # 撮影された画像をPILイメージとして読み込み
+        image = Image.open(img_file)
         
-        # OpenCVのバーコード検出器を起動
-        barcode_detector = cv2.barcode.BarcodeDetector()
-        retval, decoded_info, decoded_type, points = barcode_detector.detectAndDecode(opencv_img)
+        # 💡世界水準のバーコード解析ロボ（pyzbar）で13桁の数字を抽出
+        barcodes = decode(image)
         
-        if retval and decoded_info[0]:
-            scanned_jan = str(decoded_info[0]).strip()
+        if barcodes:
+            # 1つ目に見つかったバーコードのデータをテキスト化
+            scanned_jan = barcodes[0].data.decode('utf-8').strip()
             st.success(f"🤖 カメラでバーコードを検出しました: 【{scanned_jan}】")
         else:
-            st.warning("⚠️ バーコードがうまく認識できませんでした。もう少し近づけるか、明るい場所で正面からもう一度撮影してください。")
+            st.warning("⚠️ バーコードがうまく認識できませんでした。バーコードを枠の真ん中に、水平にまっすぐ写してもう一度撮影してみてください。")
 
 # --- 在庫登録フォーム ---
 with st.form(key="stock_form", clear_on_submit=True):
     
     if scan_method == "🔌 Bluetoothハンディ（キーボード入力）":
-        jan_code = st.text_input("📦 JANコード（バーコードをスキャン）", max_chars=13, placeholder="ここにカーソルを合わせてピッとしてください")
+        jan_code = st.text_input("📦 JANコード（バーコードをスキャン）", max_chars=13, placeholder="ここにカーソルを合わせてピッしてください")
     else:
         # カメラで読み取った値を自動で枠にセット
         jan_code = st.text_input("📦 JANコード（カメラ読取値）", value=scanned_jan, max_chars=13)
