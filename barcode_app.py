@@ -3,7 +3,7 @@ import requests
 from streamlit_barcode_reader import streamlit_barcode_reader
 
 # 💡 吉本さんのGoogleウェブアプリのURLをここに自動セットしています
-GAS_URL = "https://google.com"
+GAS_URL = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN34zs2XxREaCe64GI-1uthsF7qzn89fh36J0FH1/exec"
 
 # --- 🔒 パスワード認証機能 ---
 def check_password():
