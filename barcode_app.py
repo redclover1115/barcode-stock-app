@@ -1,8 +1,9 @@
 import streamlit as st
 import requests
-from streamlit_barcode_reader import streamlit_barcode_reader
+import cv2
+import numpy as np
 
-# 💡 吉本さんのGoogleウェブアプリのURLをここに自動セットしています
+# 💡 吉本さんのGoogleウェブアプリのURL
 GAS_URL = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN34zs2XxREaCe64GI-1uthsF7qzn89fh36J0FH1/exec"
 
 # --- 🔒 パスワード認証機能 ---
@@ -33,7 +34,7 @@ if not check_password():
 st.set_page_config(page_title="バーコード在庫管理", layout="centered")
 st.title("📱 生産現場用 バーコード在庫登録システム")
 
-# 💡【機能追加】スキャン方法の選択肢（切り替えスイッチ）を設置
+# スキャン方法の選択肢（切り替えスイッチ）を設置
 scan_method = st.radio(
     "🔍 スキャン方法を選択してください",
     ("🔌 Bluetoothハンディ（キーボード入力）", "📷 携帯のカメラで読み取る"),
@@ -45,19 +46,31 @@ st.markdown("---")
 # スキャンされたJANコードを保持する変数
 scanned_jan = ""
 
-# --- 選択肢①：携帯カメラで読み取る場合 ---
+# --- 選択肢①：携帯カメラで読み取る場合（超安定版：st.camera_input方式） ---
 if scan_method == "📷 携帯のカメラで読み取る":
-    st.write("👇 枠の中にバーコードをかざしてください（ピントが合うと自動で読み取ります）")
-    # スマホのカメラを起動する無料パーツ
-    camera_result = streamlit_barcode_reader(key="barcode_reader")
-    if camera_result:
-        scanned_jan = str(camera_result).strip()
-        st.success(f"🤖 カメラで読み取りました: 【{scanned_jan}】")
+    st.write("👇 「写真を撮る」を押してバーコードをパシャッと撮影してください")
+    
+    # Streamlit標準の、最もエラーが起きない超安定カメラ機能を起動
+    img_file = st.camera_input("バーコードを撮影", label_visibility="collapsed")
+    
+    if img_file is not None:
+        # 撮影された画像をシステムが読み解く処理
+        file_bytes = np.asarray(bytearray(img_file.read()), dtype=np.uint8)
+        opencv_img = cv2.imdecode(file_bytes, 1)
+        
+        # OpenCVのバーコード検出器を起動
+        barcode_detector = cv2.barcode.BarcodeDetector()
+        retval, decoded_info, decoded_type, points = barcode_detector.detectAndDecode(opencv_img)
+        
+        if retval and decoded_info[0]:
+            scanned_jan = str(decoded_info[0]).strip()
+            st.success(f"🤖 カメラでバーコードを検出しました: 【{scanned_jan}】")
+        else:
+            st.warning("⚠️ バーコードがうまく認識できませんでした。もう少し近づけるか、明るい場所で正面からもう一度撮影してください。")
 
 # --- 在庫登録フォーム ---
 with st.form(key="stock_form", clear_on_submit=True):
     
-    # 選択肢②（ハンディ）の場合は手入力枠に、カメラの場合は自動で数字が入るように設定
     if scan_method == "🔌 Bluetoothハンディ（キーボード入力）":
         jan_code = st.text_input("📦 JANコード（バーコードをスキャン）", max_chars=13, placeholder="ここにカーソルを合わせてピッとしてください")
     else:
@@ -72,7 +85,7 @@ with st.form(key="stock_form", clear_on_submit=True):
 
 if submit_button:
     if not jan_code:
-        st.warning("JANコードが空欄です。バーコードをスキャンまたはカメラで読み取ってください。")
+        st.warning("JANコードが空欄です。バーコードをスキャンまたはカメラで撮影してください。")
     else:
         with st.spinner("クラウド上の在庫データを書き換え中..."):
             try:
