@@ -81,7 +81,7 @@ elif st.session_state.step == 2:
     with st.form(key="count_form"):
         
         # 💡【吉本さんの新仕様に合わせた3つの振り分け項目】
-           category = st.radio(
+    category = st.radio(
         "登録する項目を選択してください",
         (
             "生産途中",
@@ -92,8 +92,7 @@ elif st.session_state.step == 2:
         horizontal=True
     )
 
-        
-        count = st.number_input(f"🔢 【{category}】の現在庫数（実数を入力）", min_value=0, value=0, step=1)
+count = st.number_input(f"🔢 【{category}】の現在庫数（実数を入力）", min_value=0, value=0, step=1)
         
         col1, col2 = st.columns(2)
         with col1:
