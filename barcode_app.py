@@ -1,124 +1,85 @@
 import streamlit as st
 import requests
 
-# 💡 吉本さんのGoogleウェブアプリのURL
-GAS_URL = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN34zs2XxREaCe64GI-1uthsF7qzn89fh36J0FH1/exec" 
+st.set_page_config(page_title="生産現場用 バーコード在庫登録システム", layout="centered")
 
-# --- 🔒 パスワード認証機能 ---
-def check_password():
-    if "barcode_password_correct" not in st.session_state:
-        st.session_state["barcode_password_correct"] = False
-    if st.session_state["barcode_password_correct"]:
-        return True
+st.title("🏭 生産現場用 バーコード在庫登録システム")
+st.write("新レイアウト対応版（項目固定・連続スキャン仕様）")
 
-    st.title("🔒 社内在庫システム：認証画面")
-    st.write("このアプリは生産現場・在庫管理メンバー専用です。")
-    
-    COMPANY_PASSWORD = "APJ_STOCK_2026" 
+# -------------------------------------------------------------
+# 【機能変更】1. 最初に登録する項目を選択（手動で変えない限り維持されます）
+# -------------------------------------------------------------
+if "selected_category" not in st.session_state:
+    st.session_state.selected_category = "生産途中"
 
-    user_password = st.text_input("パスワードを入力してください", type="password")
-    if st.button("ログイン"):
-        if user_password == COMPANY_PASSWORD:
-            st.session_state["barcode_password_correct"] = True
-            st.rerun()
-        else:
-            st.error("パスワードが違います。")
-    return False
-
-if not check_password():
-    st.stop()
-
-# --- ここから下はアプリの本編 ---
-st.set_page_config(page_title="バーコード在庫管理", layout="centered")
-st.title("📱 生産現場用 バーコード在庫登録システム")
-
-# スキャン方法の選択肢
-scan_method = st.radio(
-    "🔍 スキャン方法を選択してください",
-    ("🔌 Bluetoothハンディ（キーコード入力）", "📷 携帯のカメラで読み取る"),
-    horizontal=True
+category = st.radio(
+    "【一括設定】登録する項目を先に選択してください",
+    ("生産途中", "枠在庫", "受注生産", "在庫数量"),
+    horizontal=True,
+    index=("生産途中", "枠在庫", "受注生産", "在庫数量").index(st.session_state.selected_category)
 )
+st.session_state.selected_category = category
 
 st.markdown("---")
 
-# 一時的な記憶領域（セッション）の初期化
-if "step" not in st.session_state:
-    st.session_state.step = 1
-if "jan_code" not in st.session_state:
-    st.session_state.jan_code = ""
+# -------------------------------------------------------------
+# 2. JANコードの入力（スキャン）エリア
+# -------------------------------------------------------------
+# 入力後の自動リセット用セッション状態
+if "jan_input" not in st.session_state:
+    st.session_state.jan_input = ""
 
-# --- 🔄 【ステップ1】バーコード読み取り画面 ---
-if st.session_state.step == 1:
-    
-    if scan_method == "📷 携帯のカメラで読み取る":
-        st.write("👇 スマホのカメラ機能をお使いください")
-        img_file = st.camera_input("バーコードを撮影", label_visibility="collapsed")
-        
-        if img_file is not None:
-            from PIL import Image
-            from pyzbar.pyzbar import decode
-            image = Image.open(img_file)
-            barcodes = decode(image)
-            if barcodes:
-                st.session_state.jan_code = barcodes.data.decode('utf-8').strip()
-                st.session_state.step = 2
-                st.rerun()
-            else:
-                st.warning("⚠️ バーコードがうまく認識できませんでした。")
-                
-    else:
-        # 💡ハンディで「ピッ」とやって自動Enterが押されると、自動的にstep=2へ画面が切り替わります
-        input_jan = st.text_input("📦 JANコード（バーコードをスキャン）", max_chars=13, placeholder="ここにカーソルを合わせてピッしてください")
-        if input_jan:
-            st.session_state.jan_code = str(input_jan).strip()
-            st.session_state.step = 2
-            st.rerun()
+# バーコードスキャン入力欄
+jan_code = st.text_input(
+    f"👉 現在の登録モード: 【 {category} 】\nバーコード（JANコード）をスキャンしてください：",
+    value=st.session_state.jan_input,
+    key="jan_code_field"
+)
 
-# --- 🔢 【ステップ2】項目振り分けと数量の入力画面 ---
-elif st.session_state.step == 2:
-    st.info(f"📋 読み込み完了 ｜ JANコード: **{st.session_state.jan_code}**")
-    
-    with st.form(key='count_form'):
-        category = st.radio(
-            "登録する項目を選択してください",
-            (
-                "生産途中",
-                "枠在庫",
-                "受注生産",
-                "在庫数量"
-            ),
-            horizontal=True
-        )
-        
-        count = st.number_input(f"[{category}] の現在数量（実数を入力）", min_value=0, value=0, step=1)
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            submit_button = st.form_submit_button(label="在庫データを更新する")
-        with col2:
-            cancel_button = st.form_submit_button(label="スキャンをやり直す")
+# 数量入力（在庫数量モードの時だけ表示）
+count = 1
+if category == "在庫数量":
+    count = st.number_input("登録する数量を入力してください", min_value=1, value=1, step=1)
 
-            
-    if submit_button:
-        with st.spinner("クラウド上の在庫データを書き換え中..."):
+# -------------------------------------------------------------
+# 3. 送信処理（JANコードが入力されたら自動、またはボタンで送信）
+# -------------------------------------------------------------
+col1, col2 = st.columns(2)
+with col1:
+    submit_button = st.button("手動で送信・登録する")
+with col2:
+    if st.button("クリア / スキャンやり直し"):
+        st.session_state.jan_input = ""
+        st.rerun()
+
+# JANコードが入力された、または送信ボタンが押された場合の処理
+if jan_code or submit_button:
+    if jan_code.strip() != "":
+        with st.spinner("クラウド上の在庫データを更新中..."):
             try:
-                # 項目名（category）も一緒にGoogleスプレッドシートへ送信
-                payload = {"jan": st.session_state.jan_code, "count": int(count), "category": category}
-                response = requests.post(GAS_URL, json=payload, timeout=10)
+                # 引き継ぎURL（GAS）への送信データ作成
+                payload = {
+                    "janCode": jan_code.strip(),
+                    "status": category,  # 選択された項目（生産途中、枠在庫、受注生産、在庫数量）
+                    "count": count
+                }
+                
+                # GASの最新URL（※吉本さんの環境に合わせて環境変数等から読み込むか、ここに直接URLを記述してください）
+                # ここでは一般的なGAS連携の構成を想定しています
+                gas_url = "https://google.com" # ※実際のGASのWebアプリURLに書き換えてください
+                
+                response = requests.post(gas_url, json=payload, timeout=10)
                 result = response.json()
                 
                 if result.get("status") == "success":
-                    st.success(f"🎉 成功: 【{category}】の在庫を {count} 個 に修正しました！")
-                    st.balloons()
-                    # 登録が終わったら、自動でステップ1（スキャン待ち）に戻る
-                    st.session_state.step = 1
-                    st.session_state.jan_code = ""
+                    st.success(f"✅ 【{category}】に登録完了しました！ (JAN: {jan_code})")
+                    # 次のスキャンのためにJAN入力欄だけをクリア（選択項目は維持）
+                    st.session_state.jan_input = ""
+                    st.rerun()
+                elif result.get("status") == "not_found":
+                    st.error("❌ エラー：該当するJANコードがスプレッドシートに見つかりません。")
                 else:
-                    st.error(f"❌ エラー: {result.get('message')}")
+                    st.error(f"⚠️ 登録失敗：{result.get('message', '不明なエラー')}")
+                    
             except Exception as e:
-                st.error("通信エラーが発生しました。")
-                
-    if cancel_button:
-        st.session_state.step = 1
-        st.session_state.jan_code = ""
-        st.rerun()
+                st.error(f"🚨 通信エラーが発生しました: {str(e)}")
