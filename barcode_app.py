@@ -89,14 +89,15 @@ elif st.session_state.step == 2:
             ),
             horizontal=True
         )
-
-count = st.number_input(f"🔢 【{category}】の現在庫数（実数を入力）", min_value=0, value=0, step=1)
+        
+        count = st.number_input(f"[{category}] の現在数量（実数を入力）", min_value=0, value=0, step=1)
         
         col1, col2 = st.columns(2)
         with col1:
-            submit_button = st.form_submit_button(label="🚀 在庫データを更新する")
+            submit_button = st.form_submit_button(label="在庫データを更新する")
         with col2:
-            cancel_button = st.form_submit_button(label="↩️ スキャンをやり直す")
+            cancel_button = st.form_submit_button(label="スキャンをやり直す")
+
             
     if submit_button:
         with st.spinner("クラウド上の在庫データを書き換え中..."):
