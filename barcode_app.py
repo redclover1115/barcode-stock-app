@@ -66,7 +66,7 @@ if jan_code or submit_button:
                 
                 # GASの最新URL（※吉本さんの環境に合わせて環境変数等から読み込むか、ここに直接URLを記述してください）
                 # ここでは一般的なGAS連携の構成を想定しています
-                gas_url = "https://google.com" # ※実際のGASのWebアプリURLに書き換えてください
+                gas_url = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN34zs2XxrEaCe64Gl-1uthsF7qzn89fh36J0FH1/exec"
                 
                 response = requests.post(gas_url, json=payload, timeout=10)
                 result = response.json()
