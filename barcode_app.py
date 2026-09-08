@@ -4,43 +4,42 @@ import requests
 st.set_page_config(page_title="生産現場用 バーコード在庫登録システム", layout="centered")
 
 st.title("🏭 生産現場用 バーコード在庫登録システム")
-st.write("新レイアウト対応版（項目固定・全項目数量入力仕様）")
+st.write("新レイアウト対応版（項目固定・商品名表示・全項目数量入力仕様）")
 
 # -------------------------------------------------------------
-# 1. 登録する項目の選択（手動で変えない限り維持されます）
+# 1. 登録する項目の選択（「半受注完成品」へ変更済み）
 # -------------------------------------------------------------
 if "selected_category" not in st.session_state:
     st.session_state.selected_category = "生産途中"
 
 category = st.radio(
     "【一括設定】登録する項目を先に選択してください",
-    ("生産途中", "枠在庫", "受注生産", "在庫数量"),
+    ("生産途中", "枠在庫", "半受注完成品", "在庫数量"),
     horizontal=True,
-    index=("生産途中", "枠在庫", "受注生産", "在庫数量").index(st.session_state.selected_category)
+    index=("生産途中", "枠在庫", "半受注完成品", "在庫数量").index(st.session_state.selected_category)
 )
 st.session_state.selected_category = category
 
 st.markdown("---")
 
 # -------------------------------------------------------------
-# 2. 入力（スキャン）エリア
+# 2. 入力（スキャン）エリアとセッション状態の管理
 # -------------------------------------------------------------
-# ループ防止用フラグ
 if "processed_jan" not in st.session_state:
     st.session_state.processed_jan = ""
+if "last_item_name" not in st.session_state:
+    st.session_state.last_item_name = ""
 
-# バーコードスキャン入力欄
 jan_code = st.text_input(
     f"👉 現在の登録モード: 【 {category} 】\nバーコード（JANコード）をスキャンしてください：",
     value="",
     key="jan_code_field"
 )
 
-# 【修正】すべての項目で数量入力欄を常に表示します
 count = st.number_input(f"👉 【 {category} 】の登録数量を入力してください", min_value=1, value=1, step=1)
 
 # -------------------------------------------------------------
-# 3. 送信処理
+# 3. 送信処理と商品名表示
 # -------------------------------------------------------------
 col1, col2 = st.columns(2)
 with col1:
@@ -48,9 +47,13 @@ with col1:
 with col2:
     if st.button("クリア / スキャンやり直し"):
         st.session_state.processed_jan = ""
+        st.session_state.last_item_name = ""
         st.rerun()
 
-# 送信判定（JANが新しく入力された、またはボタンが押された場合）
+# 直前に読み込んだ商品名がある場合は画面に常時表示しておく
+if st.session_state.last_item_name:
+    st.info(f"📦 直前にスキャンした商品: **{st.session_state.last_item_name}**")
+
 if (jan_code and jan_code != st.session_state.processed_jan) or submit_button:
     current_jan = jan_code.strip() if jan_code else ""
     
@@ -62,7 +65,7 @@ if (jan_code and jan_code != st.session_state.processed_jan) or submit_button:
                 payload = {
                     "janCode": current_jan,
                     "status": category,
-                    "count": count  # 入力された数量をGASへ送信
+                    "count": count
                 }
                 
                 # ★吉本さんの本物のGASウェブアプリURLをここに貼り付けてください★
@@ -72,7 +75,9 @@ if (jan_code and jan_code != st.session_state.processed_jan) or submit_button:
                 result = response.json()
                 
                 if result.get("status") == "success":
-                    st.success(f"✅ 【{category}】に数量 {count} 個で登録完了しました！ (JAN: {current_jan})")
+                    # GASから返ってきた商品名を記憶する
+                    st.session_state.last_item_name = result.get("itemName", "商品名不明")
+                    st.success(f"✅ 【{category}】に数量 {count} 個で登録完了しました！\n📦 商品名: {st.session_state.last_item_name} (JAN: {current_jan})")
                     st.rerun()
                 elif result.get("status") == "not_found":
                     st.error("❌ エラー：該当するJANコードがスプレッドシートに見つかりません。")
