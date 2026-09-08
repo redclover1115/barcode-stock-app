@@ -5,7 +5,7 @@ import time
 st.set_page_config(page_title="生産現場用 バーコード在庫登録システム", layout="centered")
 
 st.title("🏭 生産現場用 バーコード在庫登録システム")
-st.write("新レイアウト対応版（項目固定・商品名表示・全項目数量・登録者手入力維持仕様）")
+st.write("新レイアウト対応版（項目固定・商品名表示・数量スクロール・現在在庫表示仕様）")
 
 # -------------------------------------------------------------
 # 0. 登録者の手入力エリア
@@ -22,14 +22,14 @@ st.session_state.selected_user = user_name
 st.markdown("---")
 
 # -------------------------------------------------------------
-# 1. 登録する項目の選択（「枠在庫」を「スペーサー加工待ち」に変更）
+# 1. 登録する項目の選択
 # -------------------------------------------------------------
 if "selected_category" not in st.session_state:
     st.session_state.selected_category = "生産途中"
 
 category = st.radio(
     "【一括設定】登録する項目を先に選択してください",
-    ("生産途中", "スペーサー加工待ち", "半受注完成品", "在庫数量"),  # ← 表記を変更しました
+    ("生産途中", "スペーサー加工待ち", "半受注完成品", "在庫数量"),
     horizontal=True,
     index=("生産途中", "スペーサー加工待ち", "半受注完成品", "在庫数量").index(st.session_state.selected_category)
 )
@@ -46,6 +46,8 @@ if "last_item_name" not in st.session_state:
     st.session_state.last_item_name = ""
 if "trigger_clear" not in st.session_state:
     st.session_state.trigger_clear = False
+if "current_stock" not in st.session_state:
+    st.session_state.current_stock = None
 
 input_key = "jan_field_active"
 if st.session_state.trigger_clear:
@@ -58,7 +60,8 @@ jan_code = st.text_input(
     key=input_key
 )
 
-count = st.number_input(f"👉 【 {category} 】の登録数量を入力してください", min_value=1, value=1, step=1)
+# 【修正】数量入力をスクロール（スライダー）形式に戻しました（1〜100個まで指でスライドして選べます）
+count = st.slider(f"👉 【 {category} 】の登録数量をスクロールで入力してください", min_value=1, max_value=100, value=1, step=1)
 
 # -------------------------------------------------------------
 # 3. 操作ボタン
@@ -75,8 +78,17 @@ if clear_input_only:
 
 st.markdown("---")
 
+# 【新機能】直前に読み込んだ商品の「スプレッドシートの現在在庫数」を分かりやすく表示
 if st.session_state.last_item_name:
     st.info(f"📦 直前にスキャンした商品: **{st.session_state.last_item_name}**")
+    
+    if st.session_state.current_stock:
+        st.write("📊 **現在のシート内 在庫数一覧**")
+        col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+        col_s1.metric("生産途中", f"{st.session_state.current_stock['seisan']} 個")
+        col_s2.metric("ｽﾍﾟｰｻｰ待ち", f"{st.session_state.current_stock['spacer']} 個")
+        col_s3.metric("半受注完成", f"{st.session_state.current_stock['hanjyu']} 個")
+        col_s4.metric("在庫数量", f"{st.session_state.current_stock['zaiko']} 個")
 
 # -------------------------------------------------------------
 # 4. 送信処理
@@ -93,7 +105,7 @@ if is_scanned or submit_button:
             try:
                 payload = {
                     "janCode": current_jan,
-                    "status": category,  # 「スペーサー加工待ち」という文字がGASへ送られます
+                    "status": category,
                     "count": count,
                     "user": user_name if user_name else "未入力"
                 }
@@ -106,7 +118,10 @@ if is_scanned or submit_button:
                 
                 if result.get("status") == "success":
                     st.session_state.last_item_name = result.get("itemName", "商品名不明")
-                    st.success(f"✅ 【{category}】に数量 {count} 個で登録完了しました！ (登録者: {user_name})\n📦 商品名: {st.session_state.last_item_name} (JAN: {current_jan})")
+                    # GASから届いた最新在庫データを記憶
+                    st.session_state.current_stock = result.get("stockData")
+                    
+                    st.success(f"✅ 【{category}】に数量 {count} 個で登録完了しました！ (登録者: {user_name})")
                     
                     time.sleep(2)
                     st.session_state.trigger_clear = True
