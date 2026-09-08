@@ -4,21 +4,18 @@ import requests
 st.set_page_config(page_title="生産現場用 バーコード在庫登録システム", layout="centered")
 
 st.title("🏭 生産現場用 バーコード在庫登録システム")
-st.write("新レイアウト対応版（項目固定・商品名表示・全項目数量・登録者維持仕様）")
+st.write("新レイアウト対応版（項目固定・商品名表示・全項目数量・登録者手入力維持仕様）")
 
 # -------------------------------------------------------------
-# 【修正】0. 登録者の選択（手入力で変更するまでずっと記憶・維持されます）
+# 【修正】0. 登録者の手入力エリア（手動で文字を消す・書き換えるまでずっと記憶されます）
 # -------------------------------------------------------------
 if "selected_user" not in st.session_state:
-    st.session_state.selected_user = "吉本"
+    st.session_state.selected_user = ""  # 最初は空欄
 
-user_list = ["吉本", "担当A", "担当B", "担当C"]  # ← 実際のメンバー名に自由に変更できます
-
-# セッション状態から前回の選択位置を自動計算してキープ
-user_name = st.selectbox(
-    "👤 本日の登録者を選択してください", 
-    user_list, 
-    index=user_list.index(st.session_state.selected_user)
+# 手入力できるテキストボックスを配置
+user_name = st.text_input(
+    "👤 本日の登録者名を手入力してください（例：吉本）", 
+    value=st.session_state.selected_user
 )
 st.session_state.selected_user = user_name
 
@@ -56,7 +53,7 @@ if st.session_state.trigger_clear:
     st.session_state.trigger_clear = False
 
 jan_code = st.text_input(
-    f"👉 現在の登録モード: 【 {category} 】 (登録者: {user_name})\nバーコード（JANコード）をスキャンしてください：",
+    f"👉 現在の登録モード: 【 {category} 】 (登録者: {user_name if user_name else '未入力'})\nバーコード（JANコード）をスキャンしてください：",
     value="",
     key=input_key
 )
@@ -96,7 +93,7 @@ if (jan_code and jan_code != st.session_state.processed_jan) or submit_button:
                     "janCode": current_jan,
                     "status": category,
                     "count": count,
-                    "user": user_name  # 選択されている担当者名を送信
+                    "user": user_name if user_name else "未入力"  # 手入力された名前を送信
                 }
                 
                 # ★吉本さんの本物のGASウェブアプリURLをここに貼り付けてください★
