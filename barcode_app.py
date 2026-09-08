@@ -5,7 +5,7 @@ import time
 st.set_page_config(page_title="生産現場用 バーコード在庫登録システム", layout="centered")
 
 st.title("🏭 生産現場用 バーコード在庫登録システム")
-st.write("新レイアウト対応版（項目固定・商品名表示・全項目数量・登録者手入力維持仕様）")
+st.write("スマホ手入力完全対応版（項目固定・商品名表示・全項目数量・登録者手入力維持仕様）")
 
 # -------------------------------------------------------------
 # 0. 登録者の手入力エリア
@@ -13,9 +13,11 @@ st.write("新レイアウト対応版（項目固定・商品名表示・全項�
 if "selected_user" not in st.session_state:
     st.session_state.selected_user = ""
 
+# スマホでも確実にタップして入力できるよう標準的なテキスト入力に変更
 user_name = st.text_input(
     "👤 本日の登録者名を手入力してください（例：吉本）", 
-    value=st.session_state.selected_user
+    value=st.session_state.selected_user,
+    key="user_name_input"
 )
 st.session_state.selected_user = user_name
 
@@ -44,22 +46,15 @@ if "processed_jan" not in st.session_state:
     st.session_state.processed_jan = ""
 if "last_item_name" not in st.session_state:
     st.session_state.last_item_name = ""
-if "trigger_clear" not in st.session_state:
-    st.session_state.trigger_clear = False
 
-# スマホ入力欄リセット用キーの切り替え
-input_key = "jan_field_active"
-if st.session_state.trigger_clear:
-    input_key = "jan_field_reset"
-    st.session_state.trigger_clear = False
-
+# スマホの入力欄ロックを引き起こしていた動的キー切り替えを廃止し、手入力を可能に
 jan_code = st.text_input(
-    f"👉 現在の登録モード: 【 {category} 】 (登録者: {user_name if user_name else '未入力'})\nバーコード（JANコード）をスキャンしてください：",
+    f"👉 現在の登録モード: 【 {category} 】 (登録者: {user_name if user_name else '未入力'})\nバーコード（JANコード）をスキャンまたは手入力してください：",
     value="",
-    key=input_key
+    key="jan_code_input"
 )
 
-count = st.number_input(f"👉 【 {category} 】の登録数量を入力してください", min_value=1, value=1, step=1)
+count = st.number_input(f"👉 【 {category} 】の登録数量を入力してください", min_value=1, value=1, step=1, key="count_input")
 
 # -------------------------------------------------------------
 # 3. 操作ボタン
@@ -71,7 +66,9 @@ with btn_col2:
     clear_input_only = st.button("❌ 間違えたので入力を消す", use_container_width=True)
 
 if clear_input_only:
-    st.session_state.trigger_clear = True
+    # 各入力欄の値をセッションステートから直接初期化してリフレッシュ
+    st.session_state["jan_code_input"] = ""
+    st.session_state["count_input"] = 1
     st.rerun()
 
 st.markdown("---")
@@ -80,7 +77,7 @@ if st.session_state.last_item_name:
     st.info(f"📦 直前にスキャンした商品: **{st.session_state.last_item_name}**")
 
 # -------------------------------------------------------------
-# 4. 送信処理（自動実行を廃止し、登録ボタン押下時のみ実行に変更）
+# 4. 送信処理（登録ボタン押下時のみ実行）
 # -------------------------------------------------------------
 if submit_button:
     current_jan = jan_code.strip() if jan_code else ""
@@ -88,7 +85,6 @@ if submit_button:
     if current_jan == "":
         st.error("❌ エラー：バーコード（JANコード）が入力されていません。")
     else:
-        # 処理開始直後に直前JANを記憶
         st.session_state.processed_jan = current_jan
         
         with st.spinner("クラウド上の在庫データを更新中..."):
@@ -100,8 +96,8 @@ if submit_button:
                     "user": user_name if user_name else "未入力"
                 }
                 
-                # ★吉本さんの本物のGASウェブアプリURLをここに貼り付けてください★
-                gas_url = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN34zs2XxrEaCe64Gl-1uthsF7qzn89fh36J0FH1/exec" 
+                # 吉本さんのGASウェブアプリURL
+                gas_url = "https://google.com" 
                 
                 response = requests.post(gas_url, json=payload, timeout=10)
                 result = response.json()
@@ -109,14 +105,13 @@ if submit_button:
                 if result.get("status") == "success":
                     st.session_state.last_item_name = result.get("itemName", "商品名不明")
                     
-                    # 緑色の更新完了メッセージを画面に表示
                     st.success(f"✅ 【{category}】に数量 {count} 個で登録完了しました！ (登録者: {user_name})\n📦 商品名: {st.session_state.last_item_name} (JAN: {current_jan})")
                     
-                    # 2秒間だけ画面を止めてメッセージを見せる
                     time.sleep(2)
                     
-                    # 入力欄をクリアして次の入力を待つ
-                    st.session_state.trigger_clear = True
+                    # 登録成功後、入力欄を安全にクリア
+                    st.session_state["jan_code_input"] = ""
+                    st.session_state["count_input"] = 1
                     st.rerun()
                     
                 elif result.get("status") == "not_found":
