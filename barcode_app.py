@@ -5,17 +5,21 @@ import time
 st.set_page_config(page_title="生産現場用 バーコード在庫登録システム", layout="centered")
 
 st.title("🏭 生産現場用 バーコード在庫登録システム")
-st.write("新レイアウト対応版（項目固定・商品名表示・数量スクロール・現在在庫表示仕様）")
+st.write("新レイアウト対応版（担当リスト固定・JAN即時在庫表示・数量スクロール仕様）")
 
 # -------------------------------------------------------------
-# 0. 登録者の手入力エリア
+# 【修正】0. 担当者の選択（スクロールリストに戻し、変えるまで維持）
 # -------------------------------------------------------------
 if "selected_user" not in st.session_state:
-    st.session_state.selected_user = ""
+    st.session_state.selected_user = "吉本"
 
-user_name = st.text_input(
-    "👤 本日の登録者名を手入力してください（例：吉本）", 
-    value=st.session_state.selected_user
+# 現場のメンバーリスト（必要に応じて名前を追加・変更してください）
+user_list = ["吉本", "担当A", "担当B", "担当C"] 
+
+user_name = st.selectbox(
+    "👤 本日の登録者を選択してください", 
+    user_list, 
+    index=user_list.index(st.session_state.selected_user)
 )
 st.session_state.selected_user = user_name
 
@@ -55,12 +59,12 @@ if st.session_state.trigger_clear:
     st.session_state.trigger_clear = False
 
 jan_code = st.text_input(
-    f"👉 現在の登録モード: 【 {category} 】 (登録者: {user_name if user_name else '未入力'})\nバーコード（JANコード）をスキャンしてください：",
+    f"👉 現在の登録モード: 【 {category} 】 (登録者: {user_name})\nバーコード（JANコード）をスキャンしてください：",
     value="",
     key=input_key
 )
 
-# 【修正】数量入力をスクロール（スライダー）形式に戻しました（1〜100個まで指でスライドして選べます）
+# 数量入力（スクロール形式）
 count = st.slider(f"👉 【 {category} 】の登録数量をスクロールで入力してください", min_value=1, max_value=100, value=1, step=1)
 
 # -------------------------------------------------------------
@@ -74,29 +78,45 @@ with btn_col2:
 
 if clear_input_only:
     st.session_state.trigger_clear = True
+    st.session_state.current_stock = None
+    st.session_state.last_item_name = ""
     st.rerun()
+
+# ★吉本さんの本物のGASウェブアプリURLをここに貼り付けてください★
+gas_url = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN34zs2XxrEaCe64Gl-1uthsF7qzn89fh36J0FH1/exec" 
+
+# 【新機能】JANが読み込まれたら、ボタンを押さなくても即座に現在の在庫を取得して表示
+if jan_code and jan_code.strip() != "" and jan_code.strip() != st.session_state.processed_jan:
+    current_jan = jan_code.strip()
+    try:
+        # 在庫確認用（action: check）としてGASへ送信
+        check_payload = {"janCode": current_jan, "status": category, "count": 0, "user": user_name, "action": "check"}
+        response = requests.post(gas_url, json=check_payload, timeout=10)
+        result = response.json()
+        if result.get("status") == "success":
+            st.session_state.last_item_name = result.get("itemName", "商品名不明")
+            st.session_state.current_stock = result.get("stockData")
+    except Exception as e:
+        pass
 
 st.markdown("---")
 
-# 【新機能】直前に読み込んだ商品の「スプレッドシートの現在在庫数」を分かりやすく表示
+# 【修正】指定された順番（スペーサー待ち ➔ 生産途中 ➔ 半受注完成）で在庫を表示（在庫数量は非表示）
 if st.session_state.last_item_name:
-    st.info(f"📦 直前にスキャンした商品: **{st.session_state.last_item_name}**")
+    st.info(f"📦 スキャン中の商品: **{st.session_state.last_item_name}**")
     
     if st.session_state.current_stock:
         st.write("📊 **現在のシート内 在庫数一覧**")
-        col_s1, col_s2, col_s3, col_s4 = st.columns(4)
-        col_s1.metric("生産途中", f"{st.session_state.current_stock['seisan']} 個")
-        col_s2.metric("ｽﾍﾟｰｻｰ待ち", f"{st.session_state.current_stock['spacer']} 個")
-        col_s3.metric("半受注完成", f"{st.session_state.current_stock['hanjyu']} 個")
-        col_s4.metric("在庫数量", f"{st.session_state.current_stock['zaiko']} 個")
+        col_s1, col_s2, col_s3 = st.columns(3)
+        col_s1.metric("スペーサー加工待ち", f"{st.session_state.current_stock['spacer']} 個")
+        col_s2.metric("生産途中", f"{st.session_state.current_stock['seisan']} 個")
+        col_s3.metric("半受注完成品", f"{st.session_state.current_stock['hanjyu']} 個")
 
 # -------------------------------------------------------------
-# 4. 送信処理
+# 4. 登録ボタンが押された時の送信処理
 # -------------------------------------------------------------
-is_scanned = jan_code and jan_code.strip() != "" and jan_code.strip() != st.session_state.processed_jan
-
-if is_scanned or submit_button:
-    current_jan = jan_code.strip() if jan_code else ""
+if submit_button and jan_code:
+    current_jan = jan_code.strip()
     
     if current_jan != "":
         st.session_state.processed_jan = current_jan
@@ -107,33 +127,23 @@ if is_scanned or submit_button:
                     "janCode": current_jan,
                     "status": category,
                     "count": count,
-                    "user": user_name if user_name else "未入力"
+                    "user": user_name,
+                    "action": "register"
                 }
-                
-                # ★吉本さんの本物のGASウェブアプリURLをここに貼り付けてください★
-                gas_url = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN34zs2XxrEaCe64Gl-1uthsF7qzn89fh36J0FH1/exec" 
                 
                 response = requests.post(gas_url, json=payload, timeout=10)
                 result = response.json()
                 
                 if result.get("status") == "success":
-                    st.session_state.last_item_name = result.get("itemName", "商品名不明")
-                    # GASから届いた最新在庫データを記憶
-                    st.session_state.current_stock = result.get("stockData")
-                    
-                    st.success(f"✅ 【{category}】に数量 {count} 個で登録完了しました！ (登録者: {user_name})")
-                    
+                    st.success(f"✅ 【{category}】に数量 {count} 個で登録完了しました！")
                     time.sleep(2)
                     st.session_state.trigger_clear = True
+                    st.session_state.current_stock = None
+                    st.session_state.last_item_name = ""
                     st.rerun()
-                    
                 elif result.get("status") == "not_found":
                     st.error("❌ エラー：該当するJANコードがスプレッドシートに見つかりません。")
-                    st.session_state.processed_jan = ""
                 else:
                     st.error(f"⚠️ 登録失敗：{result.get('message', '不明なエラー')}")
-                    st.session_state.processed_jan = ""
-                    
             except Exception as e:
                 st.error(f"🚨 通信エラーが発生しました: {str(e)}")
-                st.session_state.processed_jan = ""
