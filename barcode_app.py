@@ -4,7 +4,25 @@ import requests
 st.set_page_config(page_title="生産現場用 バーコード在庫登録システム", layout="centered")
 
 st.title("🏭 生産現場用 バーコード在庫登録システム")
-st.write("新レイアウト対応版（スマホ連続スキャン・即時クリア仕様）")
+st.write("新レイアウト対応版（項目固定・商品名表示・全項目数量・登録者維持仕様）")
+
+# -------------------------------------------------------------
+# 【修正】0. 登録者の選択（手入力で変更するまでずっと記憶・維持されます）
+# -------------------------------------------------------------
+if "selected_user" not in st.session_state:
+    st.session_state.selected_user = "吉本"
+
+user_list = ["吉本", "担当A", "担当B", "担当C"]  # ← 実際のメンバー名に自由に変更できます
+
+# セッション状態から前回の選択位置を自動計算してキープ
+user_name = st.selectbox(
+    "👤 本日の登録者を選択してください", 
+    user_list, 
+    index=user_list.index(st.session_state.selected_user)
+)
+st.session_state.selected_user = user_name
+
+st.markdown("---")
 
 # -------------------------------------------------------------
 # 1. 登録する項目の選択
@@ -32,14 +50,13 @@ if "last_item_name" not in st.session_state:
 if "trigger_clear" not in st.session_state:
     st.session_state.trigger_clear = False
 
-# スマホ入力欄リセット用キーの切り替え
 input_key = "jan_field_active"
 if st.session_state.trigger_clear:
     input_key = "jan_field_reset"
     st.session_state.trigger_clear = False
 
 jan_code = st.text_input(
-    f"👉 現在の登録モード: 【 {category} 】\nバーコード（JANコード）をスキャンしてください：",
+    f"👉 現在の登録モード: 【 {category} 】 (登録者: {user_name})\nバーコード（JANコード）をスキャンしてください：",
     value="",
     key=input_key
 )
@@ -47,16 +64,12 @@ jan_code = st.text_input(
 count = st.number_input(f"👉 【 {category} 】の登録数量を入力してください", min_value=1, value=1, step=1)
 
 # -------------------------------------------------------------
-# 3. 操作ボタン（★間違えた時にすぐ消せるボタンを入力欄の直下に配置★）
+# 3. 操作ボタン
 # -------------------------------------------------------------
-# スマホでも押しやすいようにボタンを横並びに配置
 btn_col1, btn_col2 = st.columns(2)
-
 with btn_col1:
     submit_button = st.button("🚀 この内容で登録する", use_container_width=True)
-
 with btn_col2:
-    # ★ 間違えたときに「送信せずに入力欄だけを白紙に戻す」ためのクリアボタンです
     clear_input_only = st.button("❌ 間違えたので入力を消す", use_container_width=True)
 
 if clear_input_only:
@@ -65,7 +78,6 @@ if clear_input_only:
 
 st.markdown("---")
 
-# 直前に読み込んだ商品名がある場合は画面の下部に表示
 if st.session_state.last_item_name:
     st.info(f"📦 直前にスキャンした商品: **{st.session_state.last_item_name}**")
 
@@ -83,7 +95,8 @@ if (jan_code and jan_code != st.session_state.processed_jan) or submit_button:
                 payload = {
                     "janCode": current_jan,
                     "status": category,
-                    "count": count
+                    "count": count,
+                    "user": user_name  # 選択されている担当者名を送信
                 }
                 
                 # ★吉本さんの本物のGASウェブアプリURLをここに貼り付けてください★
@@ -94,7 +107,7 @@ if (jan_code and jan_code != st.session_state.processed_jan) or submit_button:
                 
                 if result.get("status") == "success":
                     st.session_state.last_item_name = result.get("itemName", "商品名不明")
-                    st.success(f"✅ 【{category}】に数量 {count} 個で登録完了しました！\n📦 商品名: {st.session_state.last_item_name} (JAN: {current_jan})")
+                    st.success(f"✅ 【{category}】に数量 {count} 個で登録完了しました！ (登録者: {user_name})\n📦 商品名: {st.session_state.last_item_name} (JAN: {current_jan})")
                     
                     st.session_state.trigger_clear = True
                     st.rerun()
