@@ -5,14 +5,14 @@ import time
 st.set_page_config(page_title="生産現場用 バーコード在庫登録システム", layout="centered")
 
 st.title("🏭 生産現場用 バーコード在庫登録システム")
-st.write("現場DX版（担当者プルダウン選択・全項目数量・自動更新防止仕様）")
+st.write("現場DX版（担当者・数量プルダウン選択・自動更新防止仕様）")
 
 # -------------------------------------------------------------
 # 0. 登録者の選択エリア
 # -------------------------------------------------------------
 user_list = [
     "選択してください", 
-    "吉本", "塚越", "岡本", "中島", "関口", "中島（２）", 
+    "吉本", "塚越", "岡本", "中島", "関口", 
     "A", "B", "C", "D", "E", 
     "その他（未入力）"
 ]
@@ -60,7 +60,7 @@ if "last_item_name" not in st.session_state:
 if "trigger_clear" not in st.session_state:
     st.session_state.trigger_clear = False
 
-# 【エラー対策】スマホ入力欄を安全にクリアするためのリセットキー切り替えロジック
+# スマホ入力欄のリセットキー切り替えロジック
 input_key = "jan_field_active"
 if st.session_state.trigger_clear:
     input_key = "jan_field_reset"
@@ -72,7 +72,14 @@ jan_code = st.text_input(
     key=input_key
 )
 
-count = st.number_input(f"👉 【 {category} 】の登録数量を入力してください", min_value=1, value=1, step=1, key="count_input")
+# 【重要変更】数量の「＋/ーボタン」を廃止し、1〜100個までスクロールで一瞬で選べるリストに変更
+count_list = list(range(1, 101))
+count = st.selectbox(
+    f"👉 【 {category} 】の登録数量をスクロールして選択してください",
+    options=count_list,
+    index=0,  # 初期状態は「1」を選択
+    key="count_select"
+)
 
 # -------------------------------------------------------------
 # 3. 操作ボタン
@@ -84,9 +91,8 @@ with btn_col2:
     clear_input_only = st.button("❌ 間違えたので入力を消す", use_container_width=True)
 
 if clear_input_only:
-    # 削除ボタンが押されたらリセットフラグを立てて再実行
     st.session_state.trigger_clear = True
-    st.session_state["count_input"] = 1
+    st.session_state["count_select"] = 1
     st.rerun()
 
 st.markdown("---")
@@ -125,11 +131,11 @@ if submit_button:
                     
                     st.success(f"✅ 【{category}】に数量 {count} 個で登録完了しました！ (登録者: {final_user_name})\n📦 商品名: {st.session_state.last_item_name} (JAN: {current_jan})")
                     
-                    # 2秒間だけ画面を止めてメッセージを見せる
                     time.sleep(2)
                     
-                    # 【重要】登録成功後、エラーを出さずにJANコード入力欄を自動で「空っぽ」にして次の入力を待つ設定
+                    # 登録成功後、JANと数量を綺麗にリセット
                     st.session_state.trigger_clear = True
+                    st.session_state["count_select"] = 1
                     st.rerun()
                     
                 elif result.get("status") == "not_found":
