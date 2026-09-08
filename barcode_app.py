@@ -1,6 +1,6 @@
 import streamlit as st
 import requests
-import time  # ← メッセージを画面に残すためのタイマー機能を追加
+import time
 
 st.set_page_config(page_title="生産現場用 バーコード在庫登録システム", layout="centered")
 
@@ -47,6 +47,7 @@ if "last_item_name" not in st.session_state:
 if "trigger_clear" not in st.session_state:
     st.session_state.trigger_clear = False
 
+# スマホ入力欄リセット用キーの切り替え
 input_key = "jan_field_active"
 if st.session_state.trigger_clear:
     input_key = "jan_field_reset"
@@ -79,12 +80,16 @@ if st.session_state.last_item_name:
     st.info(f"📦 直前にスキャンした商品: **{st.session_state.last_item_name}**")
 
 # -------------------------------------------------------------
-# 4. 送信処理
+# 4. 送信処理（【修正】自動実行の条件を厳格にし、勝手な連打をブロック）
 # -------------------------------------------------------------
-if (jan_code and jan_code != st.session_state.processed_jan) or submit_button:
+# スキャン入力、または手動登録ボタンが押されたかを判定
+is_scanned = jan_code and jan_code.strip() != "" and jan_code.strip() != st.session_state.processed_jan
+
+if is_scanned or submit_button:
     current_jan = jan_code.strip() if jan_code else ""
     
-    if current_jan != "" and current_jan != st.session_state.processed_jan:
+    if current_jan != "":
+        # 処理開始直後に直前JANを記憶して自動ループを完全防止
         st.session_state.processed_jan = current_jan
         
         with st.spinner("クラウド上の在庫データを更新中..."):
@@ -97,7 +102,7 @@ if (jan_code and jan_code != st.session_state.processed_jan) or submit_button:
                 }
                 
                 # ★吉本さんの本物のGASウェブアプリURLをここに貼り付けてください★
-                gas_url = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN34zs2XxrEaCe64Gl-1uthsF7qzn89fh36J0FH1/exec" 
+                gas_url = "https://google.com" 
                 
                 response = requests.post(gas_url, json=payload, timeout=10)
                 result = response.json()
@@ -105,12 +110,13 @@ if (jan_code and jan_code != st.session_state.processed_jan) or submit_button:
                 if result.get("status") == "success":
                     st.session_state.last_item_name = result.get("itemName", "商品名不明")
                     
-                    # 【修正】緑色の成功メッセージを画面に表示
+                    # 緑色の更新完了メッセージを画面に表示
                     st.success(f"✅ 【{category}】に数量 {count} 個で登録完了しました！ (登録者: {user_name})\n📦 商品名: {st.session_state.last_item_name} (JAN: {current_jan})")
                     
-                    # 【重要】画面をリセットする前に「2秒間」だけ一時停止して、吉本さんがメッセージを目視できるようにする
+                    # 2秒間だけ画面を止めてメッセージを見せる
                     time.sleep(2)
                     
+                    # 入力欄をクリアして次の入力を待つ
                     st.session_state.trigger_clear = True
                     st.rerun()
                     
