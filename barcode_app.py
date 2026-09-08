@@ -5,46 +5,33 @@ import time
 st.set_page_config(page_title="生産現場用 バーコード在庫登録システム", layout="centered")
 
 st.title("🏭 生産現場用 バーコード在庫登録システム")
-st.write("現場DX版（担当者・数量プルダウン選択・自動更新防止仕様）")
+st.write("新レイアウト対応版（項目固定・商品名表示・全項目数量・登録者手入力維持仕様）")
 
 # -------------------------------------------------------------
-# 0. 登録者の選択エリア
+# 0. 登録者の手入力エリア
 # -------------------------------------------------------------
-user_list = [
-    "選択してください", 
-    "吉本", "塚越", "岡本", "中島", "関口", 
-    "A", "B", "C", "D", "E", 
-    "その他（未入力）"
-]
-
 if "selected_user" not in st.session_state:
-    st.session_state.selected_user = "選択してください"
+    st.session_state.selected_user = ""
 
-user_name = st.selectbox(
-    "👤 本日の登録者名を選択してください：", 
-    options=user_list,
-    index=user_list.index(st.session_state.selected_user) if st.session_state.selected_user in user_list else 0,
-    key="user_name_select"
+user_name = st.text_input(
+    "👤 本日の登録者名を手入力してください（例：吉本）", 
+    value=st.session_state.selected_user
 )
 st.session_state.selected_user = user_name
-
-final_user_name = user_name
-if user_name == "選択してください" or user_name == "その他（未入力）":
-    final_user_name = "未入力"
 
 st.markdown("---")
 
 # -------------------------------------------------------------
-# 1. 登録する項目の選択
+# 1. 登録する項目の選択（「枠在庫」を「スペーサー加工待ち」に変更）
 # -------------------------------------------------------------
 if "selected_category" not in st.session_state:
     st.session_state.selected_category = "生産途中"
 
 category = st.radio(
     "【一括設定】登録する項目を先に選択してください",
-    ("生産途中", "枠在庫", "半受注完成品", "在庫数量"),
+    ("生産途中", "スペーサー加工待ち", "半受注完成品", "在庫数量"),  # ← 表記を変更しました
     horizontal=True,
-    index=("生産途中", "枠在庫", "半受注完成品", "在庫数量").index(st.session_state.selected_category)
+    index=("生産途中", "スペーサー加工待ち", "半受注完成品", "在庫数量").index(st.session_state.selected_category)
 )
 st.session_state.selected_category = category
 
@@ -60,26 +47,18 @@ if "last_item_name" not in st.session_state:
 if "trigger_clear" not in st.session_state:
     st.session_state.trigger_clear = False
 
-# スマホ入力欄のリセットキー切り替えロジック
 input_key = "jan_field_active"
 if st.session_state.trigger_clear:
     input_key = "jan_field_reset"
     st.session_state.trigger_clear = False
 
 jan_code = st.text_input(
-    f"👉 現在の登録モード: 【 {category} 】 (登録者: {final_user_name})\nバーコード（JANコード）をスキャンまたは手入力してください：",
+    f"👉 現在の登録モード: 【 {category} 】 (登録者: {user_name if user_name else '未入力'})\nバーコード（JANコード）をスキャンしてください：",
     value="",
     key=input_key
 )
 
-# 【重要変更】数量の「＋/ーボタン」を廃止し、1〜100個までスクロールで一瞬で選べるリストに変更
-count_list = list(range(1, 101))
-count = st.selectbox(
-    f"👉 【 {category} 】の登録数量をスクロールして選択してください",
-    options=count_list,
-    index=0,  # 初期状態は「1」を選択
-    key="count_select"
-)
+count = st.number_input(f"👉 【 {category} 】の登録数量を入力してください", min_value=1, value=1, step=1)
 
 # -------------------------------------------------------------
 # 3. 操作ボタン
@@ -92,7 +71,6 @@ with btn_col2:
 
 if clear_input_only:
     st.session_state.trigger_clear = True
-    st.session_state["count_select"] = 1
     st.rerun()
 
 st.markdown("---")
@@ -101,41 +79,37 @@ if st.session_state.last_item_name:
     st.info(f"📦 直前にスキャンした商品: **{st.session_state.last_item_name}**")
 
 # -------------------------------------------------------------
-# 4. 送信処理（登録ボタン押下時のみ実行）
+# 4. 送信処理
 # -------------------------------------------------------------
-if submit_button:
+is_scanned = jan_code and jan_code.strip() != "" and jan_code.strip() != st.session_state.processed_jan
+
+if is_scanned or submit_button:
     current_jan = jan_code.strip() if jan_code else ""
     
-    if current_jan == "":
-        st.error("❌ エラー：バーコード（JANコード）が入力されていません。")
-    else:
+    if current_jan != "":
         st.session_state.processed_jan = current_jan
         
         with st.spinner("クラウド上の在庫データを更新中..."):
             try:
                 payload = {
                     "janCode": current_jan,
-                    "status": category,
+                    "status": category,  # 「スペーサー加工待ち」という文字がGASへ送られます
                     "count": count,
-                    "user": final_user_name
+                    "user": user_name if user_name else "未入力"
                 }
                 
-                # 吉本さんのGASウェブアプリURL
-                gas_url = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN34zs2XxrEaCe64Gl-1uthsF7qzn89fh36J0FH1/exec" 
+                # ★吉本さんの本物のGASウェブアプリURLをここに貼り付けてください★
+                gas_url = "https://google.com" 
                 
                 response = requests.post(gas_url, json=payload, timeout=10)
                 result = response.json()
                 
                 if result.get("status") == "success":
                     st.session_state.last_item_name = result.get("itemName", "商品名不明")
-                    
-                    st.success(f"✅ 【{category}】に数量 {count} 個で登録完了しました！ (登録者: {final_user_name})\n📦 商品名: {st.session_state.last_item_name} (JAN: {current_jan})")
+                    st.success(f"✅ 【{category}】に数量 {count} 個で登録完了しました！ (登録者: {user_name})\n📦 商品名: {st.session_state.last_item_name} (JAN: {current_jan})")
                     
                     time.sleep(2)
-                    
-                    # 登録成功後、JANと数量を綺麗にリセット
                     st.session_state.trigger_clear = True
-                    st.session_state["count_select"] = 1
                     st.rerun()
                     
                 elif result.get("status") == "not_found":
