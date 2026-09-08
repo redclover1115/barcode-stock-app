@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+import time  # ← メッセージを画面に残すためのタイマー機能を追加
 
 st.set_page_config(page_title="生産現場用 バーコード在庫登録システム", layout="centered")
 
@@ -7,12 +8,11 @@ st.title("🏭 生産現場用 バーコード在庫登録システム")
 st.write("新レイアウト対応版（項目固定・商品名表示・全項目数量・登録者手入力維持仕様）")
 
 # -------------------------------------------------------------
-# 【修正】0. 登録者の手入力エリア（手動で文字を消す・書き換えるまでずっと記憶されます）
+# 0. 登録者の手入力エリア
 # -------------------------------------------------------------
 if "selected_user" not in st.session_state:
-    st.session_state.selected_user = ""  # 最初は空欄
+    st.session_state.selected_user = ""
 
-# 手入力できるテキストボックスを配置
 user_name = st.text_input(
     "👤 本日の登録者名を手入力してください（例：吉本）", 
     value=st.session_state.selected_user
@@ -93,7 +93,7 @@ if (jan_code and jan_code != st.session_state.processed_jan) or submit_button:
                     "janCode": current_jan,
                     "status": category,
                     "count": count,
-                    "user": user_name if user_name else "未入力"  # 手入力された名前を送信
+                    "user": user_name if user_name else "未入力"
                 }
                 
                 # ★吉本さんの本物のGASウェブアプリURLをここに貼り付けてください★
@@ -104,7 +104,12 @@ if (jan_code and jan_code != st.session_state.processed_jan) or submit_button:
                 
                 if result.get("status") == "success":
                     st.session_state.last_item_name = result.get("itemName", "商品名不明")
+                    
+                    # 【修正】緑色の成功メッセージを画面に表示
                     st.success(f"✅ 【{category}】に数量 {count} 個で登録完了しました！ (登録者: {user_name})\n📦 商品名: {st.session_state.last_item_name} (JAN: {current_jan})")
+                    
+                    # 【重要】画面をリセットする前に「2秒間」だけ一時停止して、吉本さんがメッセージを目視できるようにする
+                    time.sleep(2)
                     
                     st.session_state.trigger_clear = True
                     st.rerun()
