@@ -8,7 +8,7 @@ st.title("🏭 生産現場用 バーコード在庫登録システム")
 st.write("現場DX版（担当者プルダウン選択・全項目数量・自動更新防止仕様）")
 
 # -------------------------------------------------------------
-# 0. 登録者の選択エリア（ご指定のメンバーリストを反映）
+# 0. 登録者の選択エリア
 # -------------------------------------------------------------
 user_list = [
     "選択してください", 
@@ -20,7 +20,6 @@ user_list = [
 if "selected_user" not in st.session_state:
     st.session_state.selected_user = "選択してください"
 
-# スマホでも押しやすいプルダウン（セレクトボックス）
 user_name = st.selectbox(
     "👤 本日の登録者名を選択してください：", 
     options=user_list,
@@ -29,7 +28,6 @@ user_name = st.selectbox(
 )
 st.session_state.selected_user = user_name
 
-# 「選択してください」や「その他」の場合はシステム側に「未入力」として送信
 final_user_name = user_name
 if user_name == "選択してください" or user_name == "その他（未入力）":
     final_user_name = "未入力"
@@ -59,12 +57,19 @@ if "processed_jan" not in st.session_state:
     st.session_state.processed_jan = ""
 if "last_item_name" not in st.session_state:
     st.session_state.last_item_name = ""
+if "trigger_clear" not in st.session_state:
+    st.session_state.trigger_clear = False
 
-# スマホでも手入力・スキャンがいつでも動く固定キー仕様
+# 【エラー対策】スマホ入力欄を安全にクリアするためのリセットキー切り替えロジック
+input_key = "jan_field_active"
+if st.session_state.trigger_clear:
+    input_key = "jan_field_reset"
+    st.session_state.trigger_clear = False
+
 jan_code = st.text_input(
     f"👉 現在の登録モード: 【 {category} 】 (登録者: {final_user_name})\nバーコード（JANコード）をスキャンまたは手入力してください：",
     value="",
-    key="jan_code_input"
+    key=input_key
 )
 
 count = st.number_input(f"👉 【 {category} 】の登録数量を入力してください", min_value=1, value=1, step=1, key="count_input")
@@ -79,7 +84,8 @@ with btn_col2:
     clear_input_only = st.button("❌ 間違えたので入力を消す", use_container_width=True)
 
 if clear_input_only:
-    st.session_state["jan_code_input"] = ""
+    # 削除ボタンが押されたらリセットフラグを立てて再実行
+    st.session_state.trigger_clear = True
     st.session_state["count_input"] = 1
     st.rerun()
 
@@ -119,10 +125,11 @@ if submit_button:
                     
                     st.success(f"✅ 【{category}】に数量 {count} 個で登録完了しました！ (登録者: {final_user_name})\n📦 商品名: {st.session_state.last_item_name} (JAN: {current_jan})")
                     
+                    # 2秒間だけ画面を止めてメッセージを見せる
                     time.sleep(2)
                     
-                    st.session_state["jan_code_input"] = ""
-                    st.session_state["count_input"] = 1
+                    # 【重要】登録成功後、エラーを出さずにJANコード入力欄を自動で「空っぽ」にして次の入力を待つ設定
+                    st.session_state.trigger_clear = True
                     st.rerun()
                     
                 elif result.get("status") == "not_found":
