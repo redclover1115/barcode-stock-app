@@ -4,10 +4,10 @@ import requests
 st.set_page_config(page_title="生産現場用 バーコード在庫登録システム", layout="centered")
 
 st.title("🏭 生産現場用 バーコード在庫登録システム")
-st.write("新レイアウト対応版（項目固定・商品名表示・全項目数量入力仕様）")
+st.write("新レイアウト対応版（スマホ連続スキャン・即時クリア仕様）")
 
 # -------------------------------------------------------------
-# 1. 登録する項目の選択（「半受注完成品」へ変更済み）
+# 1. 登録する項目の選択
 # -------------------------------------------------------------
 if "selected_category" not in st.session_state:
     st.session_state.selected_category = "生産途中"
@@ -29,36 +29,54 @@ if "processed_jan" not in st.session_state:
     st.session_state.processed_jan = ""
 if "last_item_name" not in st.session_state:
     st.session_state.last_item_name = ""
+if "trigger_clear" not in st.session_state:
+    st.session_state.trigger_clear = False
+
+# スマホ入力欄リセット用キーの切り替え
+input_key = "jan_field_active"
+if st.session_state.trigger_clear:
+    input_key = "jan_field_reset"
+    st.session_state.trigger_clear = False
 
 jan_code = st.text_input(
     f"👉 現在の登録モード: 【 {category} 】\nバーコード（JANコード）をスキャンしてください：",
     value="",
-    key="jan_code_field"
+    key=input_key
 )
 
 count = st.number_input(f"👉 【 {category} 】の登録数量を入力してください", min_value=1, value=1, step=1)
 
 # -------------------------------------------------------------
-# 3. 送信処理と商品名表示
+# 3. 操作ボタン（★間違えた時にすぐ消せるボタンを入力欄の直下に配置★）
 # -------------------------------------------------------------
-col1, col2 = st.columns(2)
-with col1:
-    submit_button = st.button("手動で送信・登録する")
-with col2:
-    if st.button("クリア / スキャンやり直し"):
-        st.session_state.processed_jan = ""
-        st.session_state.last_item_name = ""
-        st.rerun()
+# スマホでも押しやすいようにボタンを横並びに配置
+btn_col1, btn_col2 = st.columns(2)
 
-# 直前に読み込んだ商品名がある場合は画面に常時表示しておく
+with btn_col1:
+    submit_button = st.button("🚀 この内容で登録する", use_container_width=True)
+
+with btn_col2:
+    # ★ 間違えたときに「送信せずに入力欄だけを白紙に戻す」ためのクリアボタンです
+    clear_input_only = st.button("❌ 間違えたので入力を消す", use_container_width=True)
+
+if clear_input_only:
+    st.session_state.trigger_clear = True
+    st.rerun()
+
+st.markdown("---")
+
+# 直前に読み込んだ商品名がある場合は画面の下部に表示
 if st.session_state.last_item_name:
     st.info(f"📦 直前にスキャンした商品: **{st.session_state.last_item_name}**")
 
+# -------------------------------------------------------------
+# 4. 送信処理
+# -------------------------------------------------------------
 if (jan_code and jan_code != st.session_state.processed_jan) or submit_button:
     current_jan = jan_code.strip() if jan_code else ""
     
-    if current_jan != "":
-        st.session_state.processed_jan = jan_code
+    if current_jan != "" and current_jan != st.session_state.processed_jan:
+        st.session_state.processed_jan = current_jan
         
         with st.spinner("クラウド上の在庫データを更新中..."):
             try:
@@ -75,14 +93,19 @@ if (jan_code and jan_code != st.session_state.processed_jan) or submit_button:
                 result = response.json()
                 
                 if result.get("status") == "success":
-                    # GASから返ってきた商品名を記憶する
                     st.session_state.last_item_name = result.get("itemName", "商品名不明")
                     st.success(f"✅ 【{category}】に数量 {count} 個で登録完了しました！\n📦 商品名: {st.session_state.last_item_name} (JAN: {current_jan})")
+                    
+                    st.session_state.trigger_clear = True
                     st.rerun()
+                    
                 elif result.get("status") == "not_found":
                     st.error("❌ エラー：該当するJANコードがスプレッドシートに見つかりません。")
+                    st.session_state.processed_jan = ""
                 else:
                     st.error(f"⚠️ 登録失敗：{result.get('message', '不明なエラー')}")
+                    st.session_state.processed_jan = ""
                     
             except Exception as e:
                 st.error(f"🚨 通信エラーが発生しました: {str(e)}")
+                st.session_state.processed_jan = ""
