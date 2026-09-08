@@ -5,21 +5,34 @@ import time
 st.set_page_config(page_title="生産現場用 バーコード在庫登録システム", layout="centered")
 
 st.title("🏭 生産現場用 バーコード在庫登録システム")
-st.write("スマホ手入力完全対応版（項目固定・商品名表示・全項目数量・登録者手入力維持仕様）")
+st.write("現場DX版（担当者プルダウン選択・全項目数量・自動更新防止仕様）")
 
 # -------------------------------------------------------------
-# 0. 登録者の手入力エリア
+# 0. 登録者の選択エリア（ご指定のメンバーリストを反映）
 # -------------------------------------------------------------
+user_list = [
+    "選択してください", 
+    "吉本", "塚越", "岡本", "中島", "関口", "中島（２）", 
+    "A", "B", "C", "D", "E", 
+    "その他（未入力）"
+]
+
 if "selected_user" not in st.session_state:
-    st.session_state.selected_user = ""
+    st.session_state.selected_user = "選択してください"
 
-# スマホでも確実にタップして入力できるよう標準的なテキスト入力に変更
-user_name = st.text_input(
-    "👤 本日の登録者名を手入力してください（例：吉本）", 
-    value=st.session_state.selected_user,
-    key="user_name_input"
+# スマホでも押しやすいプルダウン（セレクトボックス）
+user_name = st.selectbox(
+    "👤 本日の登録者名を選択してください：", 
+    options=user_list,
+    index=user_list.index(st.session_state.selected_user) if st.session_state.selected_user in user_list else 0,
+    key="user_name_select"
 )
 st.session_state.selected_user = user_name
+
+# 「選択してください」や「その他」の場合はシステム側に「未入力」として送信
+final_user_name = user_name
+if user_name == "選択してください" or user_name == "その他（未入力）":
+    final_user_name = "未入力"
 
 st.markdown("---")
 
@@ -47,9 +60,9 @@ if "processed_jan" not in st.session_state:
 if "last_item_name" not in st.session_state:
     st.session_state.last_item_name = ""
 
-# スマホの入力欄ロックを引き起こしていた動的キー切り替えを廃止し、手入力を可能に
+# スマホでも手入力・スキャンがいつでも動く固定キー仕様
 jan_code = st.text_input(
-    f"👉 現在の登録モード: 【 {category} 】 (登録者: {user_name if user_name else '未入力'})\nバーコード（JANコード）をスキャンまたは手入力してください：",
+    f"👉 現在の登録モード: 【 {category} 】 (登録者: {final_user_name})\nバーコード（JANコード）をスキャンまたは手入力してください：",
     value="",
     key="jan_code_input"
 )
@@ -66,7 +79,6 @@ with btn_col2:
     clear_input_only = st.button("❌ 間違えたので入力を消す", use_container_width=True)
 
 if clear_input_only:
-    # 各入力欄の値をセッションステートから直接初期化してリフレッシュ
     st.session_state["jan_code_input"] = ""
     st.session_state["count_input"] = 1
     st.rerun()
@@ -93,11 +105,11 @@ if submit_button:
                     "janCode": current_jan,
                     "status": category,
                     "count": count,
-                    "user": user_name if user_name else "未入力"
+                    "user": final_user_name
                 }
                 
                 # 吉本さんのGASウェブアプリURL
-                gas_url = "https://google.com" 
+                gas_url = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN34zs2XxrEaCe64Gl-1uthsF7qzn89fh36J0FH1/exec" 
                 
                 response = requests.post(gas_url, json=payload, timeout=10)
                 result = response.json()
@@ -105,11 +117,10 @@ if submit_button:
                 if result.get("status") == "success":
                     st.session_state.last_item_name = result.get("itemName", "商品名不明")
                     
-                    st.success(f"✅ 【{category}】に数量 {count} 個で登録完了しました！ (登録者: {user_name})\n📦 商品名: {st.session_state.last_item_name} (JAN: {current_jan})")
+                    st.success(f"✅ 【{category}】に数量 {count} 個で登録完了しました！ (登録者: {final_user_name})\n📦 商品名: {st.session_state.last_item_name} (JAN: {current_jan})")
                     
                     time.sleep(2)
                     
-                    # 登録成功後、入力欄を安全にクリア
                     st.session_state["jan_code_input"] = ""
                     st.session_state["count_input"] = 1
                     st.rerun()
