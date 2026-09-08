@@ -53,11 +53,58 @@ if st.session_state.trigger_clear:
     input_key = "jan_field_reset"
     st.session_state.trigger_clear = False
 
-jan_code = st.text_input(
-    f"👉 現在の登録モード: 【 {category} 】 (登録者: {user_name if user_name else '未入力'})\nバーコード（JANコード）をスキャンしてください：",
-    value="",
-    key=input_key
-)
+# -------------------------------------------------------------
+# 4. 送信処理（【修正】自動実行を廃止し、登録ボタン押下時のみ実行に変更）
+# -------------------------------------------------------------
+# 「🚀 この内容で登録する」ボタンが押されたときだけ処理を実行します
+if submit_button:
+    current_jan = jan_code.strip() if jan_code else ""
+    
+    if current_jan == "":
+        st.error("❌ エラー：バーコード（JANコード）が入力されていません。")
+    else:
+        # 処理開始直後に直前JANを記憶
+        st.session_state.processed_jan = current_jan
+        
+        with st.spinner("クラウド上の在庫データを更新中..."):
+            try:
+                payload = {
+                    "janCode": current_jan,
+                    "status": category,
+                    "count": count,
+                    "user": user_name if user_name else "未入力"
+                }
+                
+                # ★吉本さんの本物のGASウェブアプリURLをここに貼り付けてください★
+                gas_url = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN34zs2XxrEaCe64Gl-1uthsF7qzn89fh36J0FH1/exec" 
+                
+                response = requests.post(gas_url, json=payload, timeout=10)
+                result = response.json()
+                
+                if result.get("status") == "success":
+                    st.session_state.last_item_name = result.get("itemName", "商品名不明")
+                    
+                    # 緑色の更新完了メッセージを画面に表示
+                    st.success(f"✅ 【{category}】に数量 {count} 個で登録完了しました！ (登録者: {user_name})\n📦 商品名: {st.session_state.last_item_name} (JAN: {current_jan})")
+                    
+                    # 2秒間だけ画面を止めてメッセージを見せる
+                    time.sleep(2)
+                    
+                    # 入力欄をクリアして次の入力を待つ
+                    st.session_state.trigger_clear = True
+                    st.rerun()
+                    
+                elif result.get("status") == "not_found":
+                    st.error("❌ エラー：該当するJANコードがスプレッドシートに見つかりません。")
+                    st.session_state.processed_jan = ""
+                else:
+                    st.error(f"⚠️ 登録失敗：{result.get('message', '不明なエラー')}")
+                    st.session_state.processed_jan = ""
+                    
+            except Exception as e:
+                st.error(f"🚨 通信エラーが発生しました: {str(e)}")
+                st.session_state.processed_jan = ""
+
 
 count = st.number_input(f"👉 【 {category} 】の登録数量を入力してください", min_value=1, value=1, step=1)
 
