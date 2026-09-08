@@ -102,7 +102,7 @@ if is_scanned or submit_button:
                 }
                 
                 # ★吉本さんの本物のGASウェブアプリURLをここに貼り付けてください★
-                gas_url = "https://google.com" 
+                gas_url = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN34zs2XxrEaCe64Gl-1uthsF7qzn89fh36J0FH1/exec" 
                 
                 response = requests.post(gas_url, json=payload, timeout=10)
                 result = response.json()
