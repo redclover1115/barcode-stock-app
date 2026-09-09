@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 
 st.title("🎰 工程在庫管理スロットアプリ")
-st.write("7工程ジャンプ完全対応・新世代ドラムスロットUIモデル")
+st.write("7工程ジャンプ完全対応・自動在庫先読みUIモデル")
 
 # 1. 共通GAS URL
 GAS_URL = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN34zs2XxrEaCe64Gl-1uthsF7qzn89fh36J0FH1/exec"
@@ -38,9 +38,9 @@ def create_secure_drum(label, options, key, default_idx=0):
     selected_value = st.selectbox(f"**{label}**", options, index=default_idx, key=key)
     return selected_value
 
-# 📊 ご要望に合わせた新しい在庫表示関数（個別内訳 ＋ 生産棚在庫のみを表示）
+# 📊 在庫・棚状況を表示する共通関数
 def display_stock_and_total(res_data, title="📊 現在の在庫状況"):
-    st.write(f"### {title}")
+    st.write(f"#### {title}")
     s = res_data.get("stockData", {})
     
     st.write("**◆ 今回のアイテムの工程内訳**")
@@ -53,12 +53,11 @@ def display_stock_and_total(res_data, title="📊 現在の在庫状況"):
     c6.metric("仕上げ", f"{s.get('shiage',0)}個")
     c7.metric("完成", f"{s.get('kanryo',0)}個")
     
-    # 📦 生産棚在庫 (完成品合計) のみを表示。不要な言葉（7工程合計など）はすべて排除しました。
     st.markdown("---")
     tana_zaiko = res_data.get("seisanTanaZaiko", 0)
     st.metric("📦 生産棚在庫 (完成品合計)", f"{tana_zaiko} 個")
 
-# メイン画面構築：担当者選択
+# メイン画面：担当者選択
 user_name = create_secure_drum("👤 担当者選択（スクロール選択）", users, "v_user", 0)
 
 st.markdown("---")
@@ -82,7 +81,7 @@ if st.button("🎰 上記の内容で通常加算登録をする", key="btn_regi
             try:
                 res = requests.post(GAS_URL, json=payload).json()
                 if res.get("status") == "success":
-                    st.success(f"⭕ {status} への工程移動が通常完了しました！")
+                    st.success(f"⭕ {status} への工程移動が通常完了しました！【商品名: {res.get('itemName')}】")
                     display_stock_and_total(res)
                 elif res.get("status") == "qty_mismatch":
                     st.session_state["mismatch_detected"] = True
@@ -122,12 +121,28 @@ if st.session_state.get("mismatch_detected", False):
 st.markdown("---")
 
 # =========================================================
-# 🔍 2. 現在の在庫状況確認・直接修正
+# 🔍 2. 現在の在庫状況確認・直接修正（★大改造：自動先読みシステム搭載）
 # =========================================================
 st.subheader("🔍 2. 現在の在庫状況確認・直接修正")
 
 status_modify = create_secure_drum("📝 直接修正したい工程を選択（スクロール）", processes, "v_status_modify", 0)
 jan_code_modify = st.text_input("📋 在庫を確認・修正するバーコード（JAN）をスキャン：", key="jan_modify_input")
+
+# JANコードが入力されたら、ボタンを押さなくても自動で裏側で在庫状況を読み込む
+if jan_code_modify:
+    with st.spinner("スプレッドシートから現在の在庫データを先読み中..."):
+        try:
+            check_payload = { "janCode": jan_code_modify, "action": "check" }
+            auto_res = requests.post(GAS_URL, json=check_payload).json()
+            if auto_res.get("status") == "success":
+                st.info(f"📦 **現在の登録アイテム**: {auto_res.get('itemName')}")
+                # 1で入力された後に表示される内容と「全く同じ内容（各工程内訳と棚状況）」を自動出現させる
+                display_stock_and_total(auto_res, title="🔍 先読みされた現在のリアルタイム在庫状況")
+            else:
+                st.error(f"⚠️ {auto_res.get('message')}")
+        except Exception as e:
+            st.error(f"データ自動取得エラー: {e}")
+
 count_modify = create_secure_drum("📝 上書き修正する数量を選択（スクロール）", counts_modify, "v_count_modify", 0)
 
 if st.button("数値を直接上書き修正（修正・削除用）", key="btn_modify"):
@@ -140,7 +155,7 @@ if st.button("数値を直接上書き修正（修正・削除用）", key="btn_
                 res = requests.post(GAS_URL, json=payload_modify).json()
                 if res.get("status") == "success":
                     st.success("⭕ 上書き修正が完了しました！")
-                    display_stock_and_total(res, "📊 最新の在庫・合計状況")
+                    display_stock_and_total(res, "📊 修正反映後の在庫・棚状況")
                 else:
                     st.error(f"エラー: {res.get('message')}")
             except Exception as e:
@@ -149,24 +164,33 @@ if st.button("数値を直接上書き修正（修正・削除用）", key="btn_
 st.markdown("---")
 
 # =========================================================
-# 📋 3. 単品コードでの現在在庫確認
+# 📋 3. 生産ライン上の各工程合計数（★仕様変更：指定時のみ全合計を算出）
 # =========================================================
-st.subheader("📋 3. 単品コードでの現在在庫確認")
+st.subheader("📋 3. 生産ライン上の各工程合計数")
+st.write("ボタンを押すと、工場全データ（1万行）の各工程ごとの縦一列の純粋な合計値をリアルタイム集計します。")
 
-jan_code_check = st.text_input("🔍 在庫のみを確認するバーコード（JAN）をスキャン：", key="jan_check_input")
-
-if st.button("現在の在庫状況を確認する", key="btn_check"):
-    if not jan_code_check:
-        st.warning("⚠️ JANコードをスキャンしてください。")
-    else:
-        payload_check = { "janCode": jan_code_check, "action": "check" }
-        with st.spinner("スプレッドシートから現在の在庫を取得中..."):
-            try:
-                res = requests.post(GAS_URL, json=payload_check).json()
-                if res.get("status") == "success":
-                    st.info(f"📦 **商品名**: {res.get('itemName')}")
-                    display_stock_and_total(res)
-                else:
-                    st.error(f"エラー: {res.get('message')}")
-            except Exception as e:
-                st.error(f"通信エラー: {e}")
+if st.button("📊 工場全体の各工程合計数を集計する", key="btn_check_total"):
+    payload_total = { "janCode": "", "action": "check_total" }
+    with st.spinner("工場全体の全1万行データを一括集計中（数秒かかります）..."):
+        try:
+            res = requests.post(GAS_URL, json=payload_total).json()
+            if res.get("status") == "success":
+                t = res.get("grandTotalData", {})
+                st.success("📊 工場全体の純粋な各工程合計数の集計が完了しました！")
+                
+                # 指定された言葉通りの縦一列の合計値をカードで並べて表示
+                col = st.columns(8)
+                col.metric("棹カット 合計", f"{t.get('katto', 0)} 個")
+                col.metric("枠組み 合計", f"{t.get('waku', 0)} 個")
+                col.metric("スペーサー 合計", f"{t.get('spacer', 0)} 個")
+                col.metric("中身セット 合計", f"{t.get('nakami', 0)} 個")
+                col.metric("金具打ち 合計", f"{t.get('kanagu', 0)} 個")
+                col.metric("仕上げ 合計", f"{t.get('shiage', 0)} 個")
+                col.metric("完成 合計", f"{t.get('kanryo', 0)} 個")
+                
+                st.markdown("---")
+                st.metric("🧱 全ライン総合計数", f"{t.get('grandTotal', 0)} 個")
+            else:
+                st.error(f"エラー: {res.get('message')}")
+        except Exception as e:
+            st.error(f"集計通信エラー: {e}")
