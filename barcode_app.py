@@ -5,7 +5,7 @@ st.title("🎰 工程在庫管理スロットアプリ")
 st.write("7工程ジャンプ完全対応・自動在庫先読みUIモデル")
 
 # 1. 共通GAS URL (ご自身のウェブアプリURLに差し替えてください)
-GAS_URL = "https://google.com"
+GAS_URL = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN34zs2XxrEaCe64Gl-1uthsF7qzn89fh36J0FH1/exec"
 
 # リストの定義
 users = ["吉本", "塚越", "岡本", "中島", "関口", "石森", "堀越", "田代", "塩原", "吉田", "杉山", "南雲", "A", "B", "アルミ", "アクリル"]
