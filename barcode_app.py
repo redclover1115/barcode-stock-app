@@ -38,7 +38,7 @@ def create_secure_drum(label, options, key, default_idx=0):
     selected_value = st.selectbox(f"**{label}**", options, index=default_idx, key=key)
     return selected_value
 
-# 📊 指定の仕様に合わせた新しい在庫表示関数
+# 📊 ご要望に合わせた新しい在庫表示関数（個別内訳 ＋ 生産棚在庫のみを表示）
 def display_stock_and_total(res_data, title="📊 現在の在庫状況"):
     st.write(f"### {title}")
     s = res_data.get("stockData", {})
@@ -53,9 +53,8 @@ def display_stock_and_total(res_data, title="📊 現在の在庫状況"):
     c6.metric("仕上げ", f"{s.get('shiage',0)}個")
     c7.metric("完成", f"{s.get('kanryo',0)}個")
     
-    # 【仕様変更】生産棚在庫（受注生産品完成在庫の全体合計）を個別の目立つ大型カードで表示
+    # 📦 生産棚在庫 (完成品合計) のみを表示。不要な言葉（7工程合計など）はすべて排除しました。
     st.markdown("---")
-    st.write("**◆ 工場全体の在庫集計**")
     tana_zaiko = res_data.get("seisanTanaZaiko", 0)
     st.metric("📦 生産棚在庫 (完成品合計)", f"{tana_zaiko} 個")
 
