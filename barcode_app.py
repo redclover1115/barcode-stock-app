@@ -3,9 +3,9 @@ import requests
 
 # アプリのタイトル
 st.title("🖨️ バーコード在庫管理アプリ")
-st.write("新レイアウト対応版（数量縦スクロール・工程移動チェック・マイナス理由入力機能付き）")
+st.write("工程ジャンプ対応・全項目縦スクロール仕様（生産ライン完全連動版）")
 
-# 1. 担当者の選択
+# 1. 担当者の選択（縦スクロール）
 st.subheader("👤 本日の登録者を選択してください")
 user_name = st.selectbox(
     "担当者名", 
@@ -58,22 +58,21 @@ def display_stock_and_total(res_data, target_title="📊 現在の在庫・合�
 # =========================================================
 st.subheader("📥 1. 通常の数量加算（新規登録）")
 
-# 工程（ステータス）の選択
-status = st.radio(
-    "数量を加算したい項目を選択してください",
-    ("生産途中", "スペーサー加工待ち", "半受注完成品", "製造指示依頼"),
-    horizontal=True,
+# 【変更点】工程の選択を「横並びボタン」から「縦スクロールの筒（selectbox）」に変更
+status = st.selectbox(
+    "移動先の工程（ステータス）をスクロールして選択してください：",
+    ["生産途中", "製造指示依頼", "スペーサー加工待ち", "半受注完成品"],
     key="reg_status"
 )
 
 # バーコードスキャン入力
 jan_code = st.text_input("📋 加算するバーコード（JAN）をスキャン：", key="jan_input")
 
-# 【変更点】数量の入力を縦スクロール（1〜100）に変更
+# 数量の入力（縦スクロール 1〜100）
 count = st.selectbox(
     "➕ 加算する数量をスクロールして選択：", 
     options=list(range(1, 101)), 
-    index=0, # 初期値は 1 
+    index=0, 
     key="reg_count"
 )
 
@@ -124,7 +123,7 @@ if st.session_state.get("mismatch_detected", False):
     st.error("⚠️ ※前工程からの数が合いません。")
     st.info(
         f"**【対象商品】: {st.session_state['item_name_temp']}**\n\n"
-        f"・前工程（{details['prevStatus']}）にあった数: **{details['prevCount']}** 個\n\n"
+        f"・直近の前工程（{details['prevStatus']}）にあった数: **{details['prevCount']}** 個\n\n"
         f"・今回移動させようとした数: **{details['inputCount']}** 個\n\n"
         f"➡️ 差分の **{details['prevCount'] - details['inputCount']}** 個について、以下のマイナス理由の内訳を入力してください。"
     )
@@ -132,7 +131,6 @@ if st.session_state.get("mismatch_detected", False):
     with st.form("reason_input_form"):
         st.write("### 📉 マイナス理由の内訳入力")
         
-        # 【変更点】マイナス理由の内訳入力も、縦スクロール（0〜100）に対応
         col1, col2, col3 = st.columns(3)
         with col1:
             count_shikka = st.selectbox("1. 出荷された", options=list(range(0, 101)), index=0, key="count_shikka")
@@ -180,16 +178,16 @@ st.markdown("---")
 # =========================================================
 st.subheader("🔍 2. 現在の在庫状況確認・直接修正")
 
-status_modify = st.radio(
-    "直接修正したい項目を選択してください",
-    ("生産途中", "スペーサー加工待ち", "半受注完成品", "製造指示依頼"),
-    horizontal=True,
+# 【変更点】直接修正の工程選択も「縦スクロールの筒」に変更
+status_modify = st.selectbox(
+    "直接修正したい項目を選択してください：",
+    ["生産途中", "製造指示依頼", "スペーサー加工待ち", "半受注完成品"],
     key="modify_status"
 )
 
 jan_code_modify = st.text_input("📋 在庫を確認・修正するバーコード（JAN）をスキャン：", key="jan_modify")
 
-# 【変更点】直接修正の数量入力も縦スクロール化（0〜500まで選べるように広めに設定）
+# 直接修正の数量入力（縦スクロール 0〜500）
 count_modify = st.selectbox(
     "📝 上書き修正する数量をスクロールして選択：", 
     options=list(range(0, 501)), 
