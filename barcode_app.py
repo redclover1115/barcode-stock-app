@@ -162,7 +162,7 @@ if st.button("数値を直接上書き修正（修正・削除用）", key="btn_
 st.markdown("---")
 
 # =========================================================
-# 📋 3. 生産ライン上の各工程合計数（★バグ完全根絶修正完了）
+# 📋 3. 生産ライン上の各工程合計数（★大改造：A / B / A+B 三連表示仕様）
 # =========================================================
 st.subheader("📋 3. 生産ライン上の各工程合計数")
 st.write("ボタンを押すと、工場全データ（1万行）の各工程ごとの縦一列の純粋な合計値をリアルタイム集計します。")
@@ -176,7 +176,7 @@ if st.button("📊 工場全体の各工程合計数を集計する", key="btn_c
                 t = res.get("grandTotalData", {})
                 st.success("📊 工場全体の純粋な各工程合計数の集計が完了しました！")
                 
-                # 【修正のポイント】1列ずつ指定（col[0], col[1]..）して、エラーを完全に発生させない安全なカード表示に変更しました
+                # 7工程個別の詳細カード表示
                 cols = st.columns(7)
                 cols[0].metric("棹カット 合計", f"{t.get('katto', 0)} 個")
                 cols[1].metric("枠組み 合計", f"{t.get('waku', 0)} 個")
@@ -187,7 +187,13 @@ if st.button("📊 工場全体の各工程合計数を集計する", key="btn_c
                 cols[6].metric("完成 合計", f"{t.get('kanryo', 0)} 個")
                 
                 st.markdown("---")
-                st.metric("🧱 全ライン総合計数", f"{t.get('grandTotal', 0)} 個")
+                
+                # 【新仕様】最下部の3大指標を横並びで表示
+                total_cols = st.columns(3)
+                total_cols[0].metric("🏭 各工程合計数(A)", f"{t.get('totalA', 0)} 個")
+                total_cols[1].metric("📦 生産課管理棚合計数(B)", f"{t.get('totalB', 0)} 個")
+                total_cols[2].metric("🧱 総合計(A+B)", f"{t.get('totalAB', 0)} 個")
+                
             else:
                 st.error(f"エラー: {res.get('message')}")
         except Exception as e:
