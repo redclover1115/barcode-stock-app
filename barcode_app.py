@@ -3,9 +3,9 @@ import requests
 
 # アプリのタイトル
 st.title("🖨️ バーコード在庫管理アプリ")
-st.write("新レイアウト対応版（担当者更新・工程移動チェック・マイナス理由入力機能付き）")
+st.write("新レイアウト対応版（数量縦スクロール・工程移動チェック・マイナス理由入力機能付き）")
 
-# 1. 担当者の選択（指定のリストに更新完了）
+# 1. 担当者の選択
 st.subheader("👤 本日の登録者を選択してください")
 user_name = st.selectbox(
     "担当者名", 
@@ -15,9 +15,42 @@ user_name = st.selectbox(
 st.markdown("---")
 
 # =========================================================
-# ⚠️ ご自身のGASのウェブアプリURLに差し替えてください
+# ⚠️ ご自身のGASのウェブアプリURL
 # =========================================================
 GAS_URL = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN34zs2XxrEaCe64Gl-1uthsF7qzn89fh36J0FH1/exec" 
+
+
+# 📊 在庫データを日本語の並びで綺麗に表示する共通関数
+def display_stock_and_total(res_data, target_title="📊 現在の在庫・合計状況"):
+    st.write(f"### {target_title}")
+    
+    # ① 今回のアイテム在庫の表示
+    stock = res_data.get("stockData", {})
+    st.write("**◆ 今回のスキャンアイテムの在庫内訳**")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("生産途中", f"{stock.get('seisan', 0)} 個")
+    with col2:
+        st.metric("製造指示依頼", f"{stock.get('shiji', 0)} 個")
+    with col3:
+        st.metric("スペーサー加工待ち", f"{stock.get('spacer', 0)} 個")
+    with col4:
+        st.metric("半受注完成品", f"{stock.get('hanjyu', 0)} 個")
+        
+    # ② 全体総合計値の表示
+    total = res_data.get("grandTotalData", {})
+    st.write("**◆ 工場全体の総合計（全1万行）**")
+    t1, t2, t3, t4, t5 = st.columns(5)
+    with t1:
+        st.metric("生産途中 計", f"{total.get('seisan', 0)} 個")
+    with t2:
+        st.metric("製造指示依頼 計", f"{total.get('shiji', 0)} 個")
+    with t3:
+        st.metric("スペーサー 計", f"{total.get('spacer', 0)} 個")
+    with t4:
+        st.metric("半受注完成品 計", f"{total.get('hanjyu', 0)} 個")
+    with t5:
+        st.metric("🧱 総合計", f"{total.get('grandTotal', 0)} 個", delta_color="off")
 
 
 # =========================================================
@@ -36,8 +69,13 @@ status = st.radio(
 # バーコードスキャン入力
 jan_code = st.text_input("📋 加算するバーコード（JAN）をスキャン：", key="jan_input")
 
-# 数量の入力
-count = st.number_input("➕ 加算する数量を入力：", min_value=1, value=1, step=1, key="reg_count")
+# 【変更点】数量の入力を縦スクロール（1〜100）に変更
+count = st.selectbox(
+    "➕ 加算する数量をスクロールして選択：", 
+    options=list(range(1, 101)), 
+    index=0, # 初期値は 1 
+    key="reg_count"
+)
 
 # 通常の登録ボタン
 if st.button("上記の項目に数量を加算する", key="btn_register"):
@@ -52,7 +90,6 @@ if st.button("上記の項目に数量を加算する", key="btn_register"):
             "action": "register"
         }
         
-        # 数量不一致のセッション状態をリセット
         st.session_state["mismatch_detected"] = False
         
         with st.spinner("スプレッドシートの在庫を確認中..."):
@@ -62,11 +99,7 @@ if st.button("上記の項目に数量を加算する", key="btn_register"):
                 
                 if res_data.get("status") == "success":
                     st.success(f"⭕ 登録および工程移動が通常完了しました！\n\n**商品名**: {res_data.get('itemName')}")
-                    st.write("### 📊 現在の在庫・合計状況")
-                    st.json({
-                        "今回のアイテム在庫": res_data.get("stockData"),
-                        "全1万行の総合計値": res_data.get("grandTotalData")
-                    })
+                    display_stock_and_total(res_data)
                     
                 elif res_data.get("status") == "qty_mismatch":
                     st.session_state["mismatch_detected"] = True
@@ -98,13 +131,15 @@ if st.session_state.get("mismatch_detected", False):
     
     with st.form("reason_input_form"):
         st.write("### 📉 マイナス理由の内訳入力")
+        
+        # 【変更点】マイナス理由の内訳入力も、縦スクロール（0〜100）に対応
         col1, col2, col3 = st.columns(3)
         with col1:
-            count_shikka = st.number_input("1. 出荷された", min_value=0, value=0, step=1, key="count_shikka")
+            count_shikka = st.selectbox("1. 出荷された", options=list(range(0, 101)), index=0, key="count_shikka")
         with col2:
-            count_furyo = st.number_input("2. 不良", min_value=0, value=0, step=1, key="count_furyo")
+            count_furyo = st.selectbox("2. 不良", options=list(range(0, 101)), index=0, key="count_furyo")
         with col3:
-            count_sonota = st.number_input("3. その他", min_value=0, value=0, step=1, key="count_sonota")
+            count_sonota = st.selectbox("3. その他", options=list(range(0, 101)), index=0, key="count_sonota")
             
         submit_reason = st.form_submit_button("内訳を確定して再送信する")
         
@@ -126,11 +161,7 @@ if st.session_state.get("mismatch_detected", False):
                         if retry_res_data.get("status") == "success":
                             st.success("⭕ 理由を確認しました。前工程を0にして移動が完了しました！")
                             st.session_state["mismatch_detected"] = False
-                            st.write("### 📊 最新の在庫・合計状況")
-                            st.json({
-                                "今回のアイテム在庫": retry_res_data.get("stockData"),
-                                "全1万行の総合計値": retry_res_data.get("grandTotalData")
-                            })
+                            display_stock_and_total(retry_res_data, "📊 最新の在庫・合計状況")
                         else:
                             st.error(f"❌ エラーが発生しました: {retry_res_data.get('message')}")
                     except Exception as e:
@@ -157,7 +188,14 @@ status_modify = st.radio(
 )
 
 jan_code_modify = st.text_input("📋 在庫を確認・修正するバーコード（JAN）をスキャン：", key="jan_modify")
-count_modify = st.number_input("📝 上書き修正する数量を入力：", min_value=0, value=0, step=1, key="modify_count")
+
+# 【変更点】直接修正の数量入力も縦スクロール化（0〜500まで選べるように広めに設定）
+count_modify = st.selectbox(
+    "📝 上書き修正する数量をスクロールして選択：", 
+    options=list(range(0, 501)), 
+    index=0, 
+    key="modify_count"
+)
 
 if st.button("数値を直接上書き修正（修正・削除用）", key="btn_modify"):
     if not jan_code_modify:
@@ -177,11 +215,7 @@ if st.button("数値を直接上書き修正（修正・削除用）", key="btn_
                 
                 if res_data.get("status") == "success":
                     st.success(f"⭕ 上書き修正が完了しました！\n\n**商品名**: {res_data.get('itemName')}")
-                    st.write("### 📊 最新の在庫・合計状況")
-                    st.json({
-                        "今回のアイテム在庫": res_data.get("stockData"),
-                        "全1万行の総合計値": res_data.get("grandTotalData")
-                    })
+                    display_stock_and_total(res_data, "📊 最新の在庫・合計状況")
                 elif res_data.get("status") == "not_found":
                     st.error(f"❌ エラー：{res_data.get('message')}")
                 else:
@@ -213,11 +247,7 @@ if st.button("現在の在庫状況を確認する", key="btn_check"):
                 
                 if res_data.get("status") == "success":
                     st.info(f"📦 **商品名**: {res_data.get('itemName')}")
-                    st.write("### 📊 現在の在庫・合計状況")
-                    st.json({
-                        "現在のアイテム在庫": res_data.get("stockData"),
-                        "全1万行の総合計値": res_data.get("grandTotalData")
-                    })
+                    display_stock_and_total(res_data)
                 elif res_data.get("status") == "not_found":
                     st.error(f"❌ エラー：{res_data.get('message')}")
                 else:
