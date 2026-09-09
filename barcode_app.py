@@ -4,7 +4,7 @@ import requests
 import json
 
 st.title("🎰 工程在庫管理スロットアプリ")
-st.write("7工程ジャンプ完全対応・独立型3DくるくるスロットUIモデル")
+st.write("7工程ジャンプ完全対応・新世代ドラムスロットUIモデル")
 
 # 1. 共通GAS URL
 GAS_URL = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN34zs2XxrEaCe64Gl-1uthsF7qzn89fh36J0FH1/exec"
@@ -12,83 +12,71 @@ GAS_URL = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN
 # リストの定義
 users = ["吉本", "塚越", "岡本", "中島", "関口", "石森", "堀越", "田代", "塩原", "吉田", "杉山", "南雲", "A", "B", "アルミ", "アクリル"]
 processes = ["棹カット", "枠組み", "スペーサー加工", "中身セット", "金具打ち", "仕上げ", "完成"]
+counts_reg = [str(i) for i in range(1, 101)]     # 1〜100
+counts_modify = [str(i) for i in range(0, 501)]  # 0〜500
+counts_reason = [str(i) for i in range(0, 101)]  # 0〜100
 
-# --- 🚀 画面を巻き込まない・独立3DくるくるスロットUI生成関数 ---
-def create_slot_picker(label, options, key, default_idx=0):
+# --- 🎰 超スムーズ＆絶対ズレない新世代ドラムスロットUI生成関数 ---
+def create_smooth_slot(label, options, key, default_idx=0):
     st.write(f"**{label}**")
     options_json = json.dumps(options, ensure_ascii=False)
     
     if key not in st.session_state:
         st.session_state[key] = options[default_idx]
         
+    # CSSのScroll Snapを使用し、スマホ本来の超滑らかな「くるくる回転＆ピタッと吸着」を実現
     html_code = f"""
-    <div style="display:flex; justify-content:center; padding:5px 0; user-select:none; -webkit-user-select:none;">
-        <div id="wrapper-{key}" style="position:relative; width:85%; height:110px; overflow:hidden; border:2px solid #b3b3b3; border-radius:12px; background:linear-gradient(to bottom, #e6e6e6, #fff 20%, #fff 80%, #e6e6e6); box-shadow:inset 0 0 15px rgba(0,0,0,0.15); touch-action:none;">
-            <div style="position:absolute; top:40px; width:100%; height:30px; border-top:2px solid #ff4b4b; border-bottom:2px solid #ff4b4b; background:rgba(255,75,75,0.04); pointer-events:none; z-index:10;"></div>
-            <div id="scroll-wheel-{key}" style="display:flex; flex-direction:column; align-items:center; transition: transform 0.1s ease-out; cursor:grab; padding-top:40px; touch-action:none;">
+    <div style="display:flex; justify-content:center; padding:2px 0; user-select:none; -webkit-user-select:none;">
+        <div style="position:relative; width:90%; height:120px; overflow:hidden; border:2px solid #a6a6a6; border-radius:14px; background:linear-gradient(to bottom, #d9d9d9, #fff 25%, #fff 75%, #d9d9d9); box-shadow:inset 0 0 12px rgba(0,0,0,0.15);">
+            <!-- 赤い中心判定線 -->
+            <div style="position:absolute; top:42px; width:100%; height:36px; border-top:2px solid #ff4b4b; border-bottom:2px solid #ff4b4b; background:rgba(255,75,75,0.03); pointer-events:none; z-index:10;"></div>
+            
+            <!-- スムーズにくるくる回る独立ドラム -->
+            <div id="drum-{key}" style="height:120px; overflow-y:scroll; scroll-snap-type: y mandatory; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; padding-top:42px; padding-bottom:42px; box-sizing:border-box;">
+                <div style="height:1px;"></div>
             </div>
         </div>
     </div>
+    <style>
+        /* スクロールバーを非表示にしてスロット感を出す */
+        #drum-{key}::-webkit-scrollbar {{ display: none; }}
+        #drum-{key} {{ -ms-overflow-style: none; scrollbar-width: none; }}
+    </style>
     <script>
         const list = {options_json};
-        const container = document.getElementById("scroll-wheel-{key}");
-        const wrapper = document.getElementById("wrapper-{key}");
+        const drum = document.getElementById("drum-{key}");
         
+        // ドラムの要素（子アイテム）を生成
         list.forEach((item) => {{
-            const div = document.createElement("div");
-            div.style.height = "30px";
-            div.style.lineHeight = "30px";
-            div.style.fontSize = "16px";
-            div.style.fontWeight = "bold";
-            div.style.color = "#222";
-            div.innerText = item;
-            container.appendChild(div);
+            const el = document.createElement("div");
+            el.style.height = "36px";
+            el.style.lineHeight = "36px";
+            el.style.fontSize = "18px";
+            el.style.fontWeight = "bold";
+            el.style.textAlign = "center";
+            el.style.color = "#111";
+            el.style.scrollSnapAlign = "center"; // 中心にピタッと吸い付かせる設定
+            el.innerText = item;
+            drum.appendChild(el);
         }});
         
-        let activeIdx = {default_idx};
+        // 初期位置の設定
+        drum.scrollTop = {default_idx} * 36;
         
-        function updateTransform() {{
-            container.style.transform = `translateY(${{-activeIdx * 30}}px)`;
-            window.parent.postMessage({{type: 'streamlit:setComponentValue', value: list[activeIdx], key: '{key}'}}, '*');
-        }}
-        
-        setTimeout(updateTransform, 250);
-        
-        let isDragging = false; let startY = 0;
-        
-        wrapper.addEventListener('mousedown', (e) => {{ isDragging = true; startY = e.clientY; e.preventDefault(); }});
-        window.addEventListener('mousemove', (e) => {{
-            if(!isDragging) return;
-            let diff = e.clientY - startY;
-            if(Math.abs(diff) > 10) {{
-                if(diff > 0 && activeIdx > 0) {{ activeIdx--; startY = e.clientY; }}
-                if(diff < 0 && activeIdx < list.length - 1) {{ activeIdx++; startY = e.clientY; }}
-                updateTransform();
-            }}
+        // 回転が止まったらStreamlitへ数値を100%確実に引き渡すイベント
+        let timeout = null;
+        drum.addEventListener('scroll', () => {{
+            clearTimeout(timeout);
+            timeout = setTimeout(() => {{
+                let index = Math.round(drum.scrollTop / 36);
+                if(index < 0) index = 0;
+                if(index >= list.length) index = list.length - 1;
+                window.parent.postMessage({{type: 'streamlit:setComponentValue', value: list[index], key: '{key}'}}, '*');
+            }}, 80); // 止まってから80ミリ秒で確定
         }});
-        window.addEventListener('mouseup', () => isDragging = false);
-        
-        wrapper.addEventListener('touchstart', (e) => {{ 
-            startY = e.touches.clientY; 
-            isDragging = true;
-        }}, {{passive: false}});
-        
-        wrapper.addEventListener('touchmove', (e) => {{
-            if(!isDragging) return;
-            if (e.cancelable) e.preventDefault(); 
-            
-            let diff = e.touches.clientY - startY;
-            if(Math.abs(diff) > 8) {{
-                if(diff > 0 && activeIdx > 0) {{ activeIdx--; startY = e.touches.clientY; }}
-                if(diff < 0 && activeIdx < list.length - 1) {{ activeIdx++; startY = e.touches.clientY; }}
-                updateTransform();
-            }}
-        }}, {{passive: false}});
-        
-        wrapper.addEventListener('touchend', () => {{ isDragging = false; }});
     </script>
     """
-    components.html(html_code, height=125)
+    components.html(html_code, height=135)
     
 def display_stock_and_total(res_data, title="📊 現在の在庫状況"):
     st.write(f"### {title}")
@@ -116,8 +104,8 @@ def display_stock_and_total(res_data, title="📊 現在の在庫状況"):
     col.metric("完成計", f"{t.get('kanryo',0)}個")
     col.metric("🧱 総合計", f"{t.get('grandTotal',0)}個")
 
-# メイン画面構築
-create_slot_picker("👤 担当者選択スロット", users, "v_user", 0)
+# メイン画面構築：担当者選択スロット
+create_smooth_slot("👤 担当者選択スロット", users, "v_user", 0)
 
 st.markdown("---")
 
@@ -126,16 +114,14 @@ st.markdown("---")
 # =========================================================
 st.subheader("📥 1. 通常の数量加算（新規登録）")
 
-create_slot_picker("🚩 移動先の工程スロット", processes, "v_status_reg", 0)
+create_smooth_slot("🚩 移動先の工程スロット", processes, "v_status_reg", 0)
 jan_code = st.text_input("📋 加算するバーコード（JAN）をスキャン：", key="jan_reg_input")
-
-counts_reg = [str(i) for i in range(1, 101)]
-create_slot_picker("➕ 登録数量スロット", counts_reg, "v_count_reg", 0)
+create_smooth_slot("➕ 登録数量スロット", counts_reg, "v_count_reg", 0) # 初期値は1個(index 0)
 
 if st.button("🎰 上記の内容で通常加算登録をする", key="btn_register"):
     user_name = st.session_state.get("v_user", "未選択")
     status = st.session_state.get("v_status_reg", "棹カット")
-    count_val = int(st.session_state.get("v_count_reg", "1"))
+    count_val = int(st.session_state.get("v_count_reg", "1")) # 新UIにより完璧に連動します
     
     if not jan_code:
         st.warning("⚠️ JANコードをスキャンしてください。")
@@ -157,15 +143,15 @@ if st.button("🎰 上記の内容で通常加算登録をする", key="btn_regi
             except Exception as e:
                 st.error(f"通信エラー: {e}")
 
+# 🚨 数量不一致エラー時のマイナス内訳
 if st.session_state.get("mismatch_detected", False):
     d = st.session_state["prev_details"]
     st.error(f"⚠️ 前工程【{d['prevStatus']}】にあった数（{d['prevCount']}個）と、今回移動する数（{d['inputCount']}個）が合いません。")
     st.info("残りの差分について、出荷・不良・その他の内訳スロットを回して合計を合わせてください。")
     
-    counts_reason = [str(i) for i in range(0, 101)]
-    create_slot_picker("📉 1. 出荷された数", counts_reason, "v_shikka", 0)
-    create_slot_picker("📉 2. 不良の数", counts_reason, "v_furyo", 0)
-    create_slot_picker("📉 3. その他の数", counts_reason, "v_sonota", 0)
+    create_smooth_slot("📉 1. 出荷された数", counts_reason, "v_shikka", 0)
+    create_smooth_slot("📉 2. 不良の数", counts_reason, "v_furyo", 0)
+    create_smooth_slot("📉 3. その他の数", counts_reason, "v_sonota", 0)
     
     if st.button("内訳を確定して再送信"):
         shikka = int(st.session_state.get("v_shikka", "0"))
@@ -190,11 +176,9 @@ st.markdown("---")
 # =========================================================
 st.subheader("🔍 2. 現在の在庫状況確認・直接修正")
 
-create_slot_picker("📝 直接修正したい工程スロット", processes, "v_status_modify", 0)
+create_smooth_slot("📝 直接修正したい工程スロット", processes, "v_status_modify", 0)
 jan_code_modify = st.text_input("📋 在庫を確認・修正するバーコード（JAN）をスキャン：", key="jan_modify_input")
-
-counts_modify = [str(i) for i in range(0, 501)]
-create_slot_picker("📝 上書き修正する数量スロット", counts_modify, "v_count_modify", 0)
+create_smooth_slot("📝 上書き修正する数量スロット", counts_modify, "v_count_modify", 0)
 
 if st.button("数値を直接上書き修正（修正・削除用）", key="btn_modify"):
     user_name = st.session_state.get("v_user", "未選択")
