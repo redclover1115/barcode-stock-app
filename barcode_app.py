@@ -1,222 +1,83 @@
 import streamlit as st
 import requests
-import time
 
-st.set_page_config(page_title="生産現場用 バーコード在庫登録システム", layout="centered")
+# --- [既存のコード] ボタンが押されたり、初期データを用意する部分 ---
+# ※ payload には janCode, status, count, user, action が入っている想定です
 
-st.title("🏭 生産現場用 バーコード在庫登録システム")
-st.write("新レイアウト対応版（担当者更新・上下両方でリアルタイム在庫表示・全体総合計仕様）")
+# GASのWebアプリURL（お使いのURLに差し替えてください）
+GAS_URL = "https://google.com..." 
 
-# ★吉本さんの本物のGASウェブアプリURLをここに貼り付けてください★
-gas_url = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN34zs2XxrEaCe64Gl-1uthsF7qzn89fh36J0FH1/exec" 
+# 初回送信ボタンが押されたときの処理（例）
+if st.button("上記の項目に数量を加算する"):
+    # 状態をクリアするためのセッション初期化
+    st.session_state["mismatch_detected"] = False
+    
+    # GASへ一回目のリクエスト
+    response = requests.post(GAS_URL, json=payload)
+    res_data = response.json()
+    
+    if res_data.get("status") == "success":
+        st.success(f"【{res_data['itemName']}】の工程移動が通常完了しました！")
+        st.rerun()
+        
+    elif res_data.get("status") == "qty_mismatch":
+        # 数量不一致エラーを検知した場合、セッションに状態を保存して画面を切り替える
+        st.session_state["mismatch_detected"] = True
+        st.session_state["prev_details"] = res_data["details"]
+        st.session_state["original_payload"] = payload
 
-# -------------------------------------------------------------
-# 0. 担当者の選択（変えるまで維持）
-# -------------------------------------------------------------
-if "selected_user" not in st.session_state:
-    st.session_state.selected_user = "吉本"
-
-user_list = [
-    "吉本", "塚越", "岡本", "中島", "関口", "石森", "堀越", 
-    "田代", "塩原", "吉田", "杉山", "南雲", "A", "B", "アルミ", "アクリル"
-] 
-
-user_name = st.selectbox("👤 本日の登録者を選択してください", user_list, index=user_list.index(st.session_state.selected_user))
-st.session_state.selected_user = user_name
-
-# =============================================================
-# 【上半分】通常の「新規加算 登録エリア」
-# =============================================================
-st.subheader("📥 1. 通常の数量加算（新規登録）")
-
-if "reg_category" not in st.session_state:
-    st.session_state.reg_category = "生産途中"
-
-reg_category = st.radio(
-    "👇 数量を加算したい項目を選択してください",
-    ("生産途中", "スペーサー加工待ち", "半受注完成品", "製造指示依頼"),
-    horizontal=True,
-    key="reg_cat_radio"
-)
-
-if "trigger_clear_reg" not in st.session_state:
-    st.session_state.trigger_clear_reg = False
-if "reg_stock_data" not in st.session_state:
-    st.session_state.reg_stock_data = None
-if "reg_item_name" not in st.session_state:
-    st.session_state.reg_item_name = ""
-if "last_reg_jan" not in st.session_state:
-    st.session_state.last_reg_jan = ""
-if "grand_total_data" not in st.session_state:
-    st.session_state.grand_total_data = None
-
-reg_key = "jan_reg_active"
-if st.session_state.trigger_clear_reg:
-    reg_key = "jan_reg_reset"
-    st.session_state.trigger_clear_reg = False
-
-jan_reg = st.text_input("👉 加算するバーコード（JAN）をスキャン：", value="", key=reg_key)
-
-# 上半分でJANがスキャンされたら即座に在庫を取得
-if jan_reg and jan_reg.strip() != "" and jan_reg.strip() != st.session_state.last_reg_jan:
-    current_reg_jan = jan_reg.strip()
-    st.session_state.last_reg_jan = current_reg_jan
-    try:
-        res = requests.post(gas_url, json={"janCode": current_reg_jan, "status": "生産途中", "count": 0, "user": user_name, "action": "check"}, timeout=10).json()
-        if res.get("status") == "success":
-            st.session_state.reg_item_name = res.get("itemName", "商品名不明")
-            st.session_state.reg_stock_data = res.get("stockData")
-            st.session_state.grand_total_data = res.get("grandTotalData")
-            st.session_state.mod_item_name = res.get("itemName", "商品名不明")
-            st.session_state.mod_stock_data = res.get("stockData")
-    except:
-        pass
-
-# 上半分用の在庫メーター表示
-if st.session_state.reg_item_name:
-    st.info(f"📦 対象商品: **{st.session_state.reg_item_name}**")
-    if st.session_state.reg_stock_data:
-        st.write("📊 **現在のアイテム内 在庫数（加算前の確認用）**")
-        col_reg1, col_reg2, col_reg3 = st.columns(3)
-        col_reg1.metric("スペーサー加工待ち", f"{st.session_state.reg_stock_data['spacer']} 個")
-        col_reg2.metric("生産途中", f"{st.session_state.reg_stock_data['seisan']} 個")
-        col_reg3.metric("半受注完成品", f"{st.session_state.reg_stock_data['hanjyu']} 個")
-
-count_reg = st.slider("👉 加算する数量をスクロールで入力：", min_value=1, max_value=100, value=1, key="count_reg_slider")
-
-if st.button("🚀 上記の項目に数量を加算する", use_container_width=True):
-    if st.session_state.last_reg_jan != "":
-        with st.spinner("クラウドに数量を加算中..."):
-            try:
-                payload = {"janCode": st.session_state.last_reg_jan, "status": reg_category, "count": count_reg, "user": user_name, "action": "register"}
-                res = requests.post(gas_url, json=payload, timeout=10).json()
-                if res.get("status") == "success":
-                    st.success(f"✅ 【{reg_category}】に数量 {count_reg} 個を加算登録しました！")
-                    st.session_state.grand_total_data = res.get("grandTotalData")
-                    time.sleep(2)
-                    st.session_state.trigger_clear_reg = True
-                    st.session_state.reg_stock_data = None
-                    st.session_state.reg_item_name = ""
-                    st.session_state.last_reg_jan = ""
+# --- 数量不一致エラーが発生した時だけ出現する「理由入力フォーム」 ---
+if st.session_state.get("mismatch_detected", False):
+    details = st.session_state["prev_details"]
+    
+    st.error(f"⚠️ {res_data.get('message')}")
+    st.info(
+        f"**現在の不一致状況**\n\n"
+        f"・前工程（{details['prevStatus']}）の残数: **{details['prevCount']}** 個\n\n"
+        f"・今回移動させようとした数: **{details['inputCount']}** 個\n\n"
+        f"➡️ 差分の **{details['prevCount'] - details['inputCount']}** 個について、以下のマイナス理由の内訳を入力してください。"
+    )
+    
+    # 理由入力用のフォーム
+    with st.form("reason_input_form"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            count_shikka = st.number_input("1. 出荷された", min_value=0, value=0, step=1)
+        with col2:
+            count_furyo = st.number_input("2. 不良", min_value=0, value=0, step=1)
+        with col3:
+            count_sonota = st.number_input("3. その他", min_value=0, value=0, step=1)
+            
+        submit_reason = st.form_submit_button("内訳を確定して再送信する")
+        
+        if submit_reason:
+            # 「今回の入力数」＋「マイナス理由の合計」を計算
+            total_calculated = details['inputCount'] + count_shikka + count_furyo + count_sonota
+            
+            # 前工程の総数と一致するか厳密にチェック
+            if total_calculated == details['prevCount']:
+                # 元のデータに強制処理フラグと内訳を上乗せする
+                retry_payload = st.session_state["original_payload"]
+                retry_payload["forceHeader"] = True
+                retry_payload["countShikka"] = count_shikka
+                retry_payload["countFuryo"] = count_furyo
+                retry_payload["countSonota"] = count_sonota
+                
+                # GASへ二回目のリクエスト（強制上書き処理）
+                retry_response = requests.post(GAS_URL, json=retry_payload)
+                retry_res_data = retry_response.json()
+                
+                if retry_res_data.get("status") == "success":
+                    st.success("理由を確認し、前工程をクリアして無事に移動が完了しました！")
+                    # セッションをクリアして画面を元に戻す
+                    st.session_state["mismatch_detected"] = False
                     st.rerun()
                 else:
-                    st.error(f"❌ エラー：{res.get('message')}")
-            except Exception as e:
-                st.error(f"🚨 通信エラー: {str(e)}")
-
-st.write(" ")
-st.write(" ")
-
-# =============================================================
-# 【下半分】常時在庫状況 表示 ＆ 修正する 選択エリア
-# =============================================================
-st.subheader("🔍 2. 現在の在庫状況 確認・直接修正")
-
-if "trigger_clear_mod" not in st.session_state:
-    st.session_state.trigger_clear_mod = False
-if "mod_stock_data" not in st.session_state:
-    st.session_state.mod_stock_data = None
-if "mod_item_name" not in st.session_state:
-    st.session_state.mod_item_name = ""
-if "last_mod_jan" not in st.session_state:
-    st.session_state.last_mod_jan = ""
-
-mod_key = "jan_mod_active"
-if st.session_state.trigger_clear_mod:
-    mod_key = "jan_mod_reset"
-    st.session_state.trigger_clear_mod = False
-
-jan_mod = st.text_input("🔍 在庫を確認するバーコード（JAN）をスキャン：", value="", key=mod_key)
-
-if jan_mod and jan_mod.strip() != "" and jan_mod.strip() != st.session_state.last_mod_jan:
-    current_jan = jan_mod.strip()
-    st.session_state.last_mod_jan = current_jan
-    try:
-        res = requests.post(gas_url, json={"janCode": current_jan, "status": "生産途中", "count": 0, "user": user_name, "action": "check"}, timeout=10).json()
-        if res.get("status") == "success":
-            st.session_state.mod_item_name = res.get("itemName", "商品名不明")
-            st.session_state.mod_stock_data = res.get("stockData")
-            st.session_state.grand_total_data = res.get("grandTotalData")
-            st.session_state.reg_item_name = res.get("itemName", "商品名不明")
-            st.session_state.reg_stock_data = res.get("stockData")
-    except:
-        pass
-
-if st.session_state.mod_item_name:
-    st.info(f"📦 対象商品: **{st.session_state.mod_item_name}**")
-    if st.session_state.mod_stock_data:
-        st.write("📊 **現在のアイテム内 在庫数（常時確認用）**")
-        col_s1, col_s2, col_s3 = st.columns(3)
-        col_s1.metric("スペーサー加工待ち", f"{st.session_state.mod_stock_data['spacer']} 個")
-        col_s2.metric("生産途中", f"{st.session_state.mod_stock_data['seisan']} 個")
-        col_s3.metric("半受注完成品", f"{st.session_state.mod_stock_data['hanjyu']} 個")
-
-    st.markdown("---")
-    
-    is_modify_mode = st.checkbox("✏️ 登録数量を直接上書き修正する", value=False)
-
-    if is_modify_mode:
-        st.write("🔧 **数量の直接上書き修正モード**")
-        mod_category = st.radio("👇 修正したい項目（コマンド）を選択してください", ("スペーサー加工待ち", "生産途中", "半受注完成品", "製造指示依頼"), horizontal=True, key="mod_cat_radio")
-
-        default_mod_count = 0
-        if st.session_state.mod_stock_data:
-            if mod_category == "スペーサー加工待ち": default_mod_count = int(st.session_state.mod_stock_data['spacer'])
-            elif mod_category == "生産途中": default_mod_count = int(st.session_state.mod_stock_data['seisan'])
-            elif mod_category == "半受注完成品": default_mod_count = int(st.session_state.mod_stock_data['hanjyu'])
-
-        count_mod = st.slider(f"👉 【 {mod_category} 】の正しい数量を指定してください", min_value=0, max_value=200, value=default_mod_count, key="count_mod_slider")
-
-        btn_col1, btn_col2 = st.columns(2)
-        with btn_col1:
-            if st.button("🚀 この内容で数量を上書き（修正）する", use_container_width=True):
-                with st.spinner("クラウド上の在庫データを直接書き換え中..."):
-                    try:
-                        payload = {"janCode": st.session_state.last_mod_jan, "status": mod_category, "count": count_mod, "user": user_name, "action": "modify"}
-                        res = requests.post(gas_url, json=payload, timeout=10).json()
-                        if res.get("status") == "success":
-                            st.success(f"✅ 【{mod_category}】の数量を {count_mod} 個に直接上書き修正しました！")
-                            st.session_state.grand_total_data = res.get("grandTotalData")
-                            time.sleep(2)
-                            st.session_state.trigger_clear_mod = True
-                            st.session_state.mod_stock_data = None
-                            st.session_state.mod_item_name = ""
-                            st.session_state.last_mod_jan = ""
-                            st.rerun()
-                    except Exception as e:
-                        st.error(f"🚨 通信エラー: {str(e)}")
-        with btn_col2:
-            if st.button("❌ 修正をキャンセルして閉じる", use_container_width=True):
-                st.session_state.trigger_clear_mod = True
-                st.session_state.mod_stock_data = None
-                st.session_state.mod_item_name = ""
-                st.session_state.last_mod_jan = ""
-                st.rerun()
-
-st.write(" ")
-st.write(" ")
-
-# =============================================================
-# 【最下部】3．全体の在庫状況（確認用）エリア（★全シートの縦合計数に対応★）
-# =============================================================
-st.markdown("---")
-is_show_total = st.checkbox("📈 3．全体の在庫状況（確認用）を表示する", value=False)
-
-if is_show_total:
-    if st.session_state.grand_total_data:
-        st.subheader("📋 3．工場全体の在庫状況（全アイテムの総和）")
-        
-        g_spacer = int(st.session_state.grand_total_data.get('spacer', 0))
-        g_seisan = int(st.session_state.grand_total_data.get('seisan', 0))
-        g_hanjyu = int(st.session_state.grand_total_data.get('hanjyu', 0))
-        g_zaiko  = int(st.session_state.grand_total_data.get('zaiko', 0))
-        g_total  = int(st.session_state.grand_total_data.get('grandTotal', 0))
-        
-        # 4つの大集計値を表示
-        col_t1, col_t2, col_t3, col_t4 = st.columns(4)
-        col_t1.metric("全体のスペーサー待ち総数", f"{g_spacer:,} 個")
-        col_t2.metric("全体の生産途中総数", f"{g_seisan:,} 個")
-        col_t3.metric("全体の半受注完成総数", f"{g_hanjyu:,} 個")
-        col_t4.metric("全体の製造指示依頼総数", f"{g_zaiko:,} 個")
-        
-        # 工場内のすべての全合計値を大きくアピールして表示
+                    st.error(f"エラーが発生しました: {retry_res_data.get('message')}")
+            else:
+                # 合計数が合わない場合は、処理をブロックして警告を出す
+                gap = details['prevCount'] - total_calculated
+                if gap > 0:
+                    st.warning(f"❌ 数量がまだ **{gap}個** 足りません。内訳を正しく修正してください。")
+                else:
+                    st.warning(f"❌ 内訳の合計が前工程の数を **{abs(gap)}個** 超えています。修正してください。")
