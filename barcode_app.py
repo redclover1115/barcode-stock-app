@@ -5,7 +5,7 @@ import time
 st.set_page_config(page_title="生産現場用 バーコード在庫登録システム", layout="centered")
 
 st.title("🏭 生産現場用 バーコード在庫登録システム")
-st.write("新レイアウト対応版（担当者更新・上下両方でリアルタイム在庫表示・全体合計仕様）")
+st.write("新レイアウト対応版（担当者更新・上下両方でリアルタイム在庫表示・全体総合計仕様）")
 
 # ★吉本さんの本物のGASウェブアプリURLをここに貼り付けてください★
 gas_url = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN34zs2XxrEaCe64Gl-1uthsF7qzn89fh36J0FH1/exec" 
@@ -47,6 +47,8 @@ if "reg_item_name" not in st.session_state:
     st.session_state.reg_item_name = ""
 if "last_reg_jan" not in st.session_state:
     st.session_state.last_reg_jan = ""
+if "grand_total_data" not in st.session_state:
+    st.session_state.grand_total_data = None
 
 reg_key = "jan_reg_active"
 if st.session_state.trigger_clear_reg:
@@ -64,6 +66,9 @@ if jan_reg and jan_reg.strip() != "" and jan_reg.strip() != st.session_state.las
         if res.get("status") == "success":
             st.session_state.reg_item_name = res.get("itemName", "商品名不明")
             st.session_state.reg_stock_data = res.get("stockData")
+            st.session_state.grand_total_data = res.get("grandTotalData")
+            st.session_state.mod_item_name = res.get("itemName", "商品名不明")
+            st.session_state.mod_stock_data = res.get("stockData")
     except:
         pass
 
@@ -71,7 +76,7 @@ if jan_reg and jan_reg.strip() != "" and jan_reg.strip() != st.session_state.las
 if st.session_state.reg_item_name:
     st.info(f"📦 対象商品: **{st.session_state.reg_item_name}**")
     if st.session_state.reg_stock_data:
-        st.write("📊 **現在のシート内 在庫数（加算前の確認用）**")
+        st.write("📊 **現在のアイテム内 在庫数（加算前の確認用）**")
         col_reg1, col_reg2, col_reg3 = st.columns(3)
         col_reg1.metric("スペーサー加工待ち", f"{st.session_state.reg_stock_data['spacer']} 個")
         col_reg2.metric("生産途中", f"{st.session_state.reg_stock_data['seisan']} 個")
@@ -87,6 +92,7 @@ if st.button("🚀 上記の項目に数量を加算する", use_container_width
                 res = requests.post(gas_url, json=payload, timeout=10).json()
                 if res.get("status") == "success":
                     st.success(f"✅ 【{reg_category}】に数量 {count_reg} 個を加算登録しました！")
+                    st.session_state.grand_total_data = res.get("grandTotalData")
                     time.sleep(2)
                     st.session_state.trigger_clear_reg = True
                     st.session_state.reg_stock_data = None
@@ -130,13 +136,16 @@ if jan_mod and jan_mod.strip() != "" and jan_mod.strip() != st.session_state.las
         if res.get("status") == "success":
             st.session_state.mod_item_name = res.get("itemName", "商品名不明")
             st.session_state.mod_stock_data = res.get("stockData")
+            st.session_state.grand_total_data = res.get("grandTotalData")
+            st.session_state.reg_item_name = res.get("itemName", "商品名不明")
+            st.session_state.reg_stock_data = res.get("stockData")
     except:
         pass
 
 if st.session_state.mod_item_name:
     st.info(f"📦 対象商品: **{st.session_state.mod_item_name}**")
     if st.session_state.mod_stock_data:
-        st.write("📊 **現在のシート内 在庫数（常時確認用）**")
+        st.write("📊 **現在のアイテム内 在庫数（常時確認用）**")
         col_s1, col_s2, col_s3 = st.columns(3)
         col_s1.metric("スペーサー加工待ち", f"{st.session_state.mod_stock_data['spacer']} 個")
         col_s2.metric("生産途中", f"{st.session_state.mod_stock_data['seisan']} 個")
@@ -167,6 +176,7 @@ if st.session_state.mod_item_name:
                         res = requests.post(gas_url, json=payload, timeout=10).json()
                         if res.get("status") == "success":
                             st.success(f"✅ 【{mod_category}】の数量を {count_mod} 個に直接上書き修正しました！")
+                            st.session_state.grand_total_data = res.get("grandTotalData")
                             time.sleep(2)
                             st.session_state.trigger_clear_mod = True
                             st.session_state.mod_stock_data = None
@@ -187,36 +197,26 @@ st.write(" ")
 st.write(" ")
 
 # =============================================================
-# 【最下部】3．全体の在庫状況（確認用）エリア
+# 【最下部】3．全体の在庫状況（確認用）エリア（★全シートの縦合計数に対応★）
 # =============================================================
 st.markdown("---")
 is_show_total = st.checkbox("📈 3．全体の在庫状況（確認用）を表示する", value=False)
 
 if is_show_total:
-    active_stock_data = st.session_state.mod_stock_data if st.session_state.mod_stock_data else st.session_state.reg_stock_data
-    active_item_name = st.session_state.mod_item_name if st.session_state.mod_item_name else st.session_state.reg_item_name
-    
-    if active_stock_data:
-        st.subheader("📋 3．全体の在庫状況（確認用）")
-        st.write(f"📦 対象商品: **{active_item_name}**")
+    if st.session_state.grand_total_data:
+        st.subheader("📋 3．工場全体の在庫状況（全アイテムの総和）")
         
-        spacer_count = int(active_stock_data.get('spacer', 0))
-        seisan_count = int(active_stock_data.get('seisan', 0))
-        hanjyu_count = int(active_stock_data.get('hanjyu', 0))
+        g_spacer = int(st.session_state.grand_total_data.get('spacer', 0))
+        g_seisan = int(st.session_state.grand_total_data.get('seisan', 0))
+        g_hanjyu = int(st.session_state.grand_total_data.get('hanjyu', 0))
+        g_zaiko  = int(st.session_state.grand_total_data.get('zaiko', 0))
+        g_total  = int(st.session_state.grand_total_data.get('grandTotal', 0))
         
-        # 修正版：GAS側からF列（製造指示依頼）のデータを安全に読み込む処理
-        zaiko_count = 0
-        if 'zaiko' in active_stock_data:
-            zaiko_count = int(active_stock_data['zaiko'])
-        
-        total_count = spacer_count + seisan_count + hanjyu_count + zaiko_count
-        
+        # 4つの大集計値を表示
         col_t1, col_t2, col_t3, col_t4 = st.columns(4)
-        col_t1.metric("スペーサー加工待ち", f"{spacer_count} 個")
-        col_t2.metric("生産途中", f"{seisan_count} 個")
-        col_t3.metric("半受注完成品", f"{hanjyu_count} 個")
-        col_t4.metric("製造指示依頼", f"{zaiko_count} 個")
+        col_t1.metric("全体のスペーサー待ち総数", f"{g_spacer:,} 個")
+        col_t2.metric("全体の生産途中総数", f"{g_seisan:,} 個")
+        col_t3.metric("全体の半受注完成総数", f"{g_hanjyu:,} 個")
+        col_t4.metric("全体の製造指示依頼総数", f"{g_zaiko:,} 個")
         
-        st.info(f"📊 **4項目すべての全体合計: {total_count} 個**")
-    else:
-        st.warning("⚠️ 上記の入力欄(1または2)にバーコードを一度スキャンすると、ここに全体合計が自動計算されます。")
+        # 工場内のすべての全合計値を大きくアピールして表示
