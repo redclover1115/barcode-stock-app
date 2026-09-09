@@ -121,14 +121,13 @@ if st.session_state.get("mismatch_detected", False):
 st.markdown("---")
 
 # =========================================================
-# 🔍 2. 現在の在庫状況確認・直接修正（★大改造：自動先読みシステム搭載）
+# 🔍 2. 現在の在庫状況確認・直接修正
 # =========================================================
 st.subheader("🔍 2. 現在の在庫状況確認・直接修正")
 
 status_modify = create_secure_drum("📝 直接修正したい工程を選択（スクロール）", processes, "v_status_modify", 0)
 jan_code_modify = st.text_input("📋 在庫を確認・修正するバーコード（JAN）をスキャン：", key="jan_modify_input")
 
-# JANコードが入力されたら、ボタンを押さなくても自動で裏側で在庫状況を読み込む
 if jan_code_modify:
     with st.spinner("スプレッドシートから現在の在庫データを先読み中..."):
         try:
@@ -136,7 +135,6 @@ if jan_code_modify:
             auto_res = requests.post(GAS_URL, json=check_payload).json()
             if auto_res.get("status") == "success":
                 st.info(f"📦 **現在の登録アイテム**: {auto_res.get('itemName')}")
-                # 1で入力された後に表示される内容と「全く同じ内容（各工程内訳と棚状況）」を自動出現させる
                 display_stock_and_total(auto_res, title="🔍 先読みされた現在のリアルタイム在庫状況")
             else:
                 st.error(f"⚠️ {auto_res.get('message')}")
@@ -164,29 +162,29 @@ if st.button("数値を直接上書き修正（修正・削除用）", key="btn_
 st.markdown("---")
 
 # =========================================================
-# 📋 3. 生産ライン上の各工程合計数（★仕様変更：指定時のみ全合計を算出）
+# 📋 3. 生産ライン上の各工程合計数（★バグ完全根絶修正完了）
 # =========================================================
 st.subheader("📋 3. 生産ライン上の各工程合計数")
 st.write("ボタンを押すと、工場全データ（1万行）の各工程ごとの縦一列の純粋な合計値をリアルタイム集計します。")
 
 if st.button("📊 工場全体の各工程合計数を集計する", key="btn_check_total"):
     payload_total = { "janCode": "", "action": "check_total" }
-    with st.spinner("工場全体の全1万行データを一括集計中（数秒かかります）..."):
+    with st.spinner("工場全体の全1万行データを一括集計中..."):
         try:
             res = requests.post(GAS_URL, json=payload_total).json()
             if res.get("status") == "success":
                 t = res.get("grandTotalData", {})
                 st.success("📊 工場全体の純粋な各工程合計数の集計が完了しました！")
                 
-                # 指定された言葉通りの縦一列の合計値をカードで並べて表示
-                col = st.columns(8)
-                col.metric("棹カット 合計", f"{t.get('katto', 0)} 個")
-                col.metric("枠組み 合計", f"{t.get('waku', 0)} 個")
-                col.metric("スペーサー 合計", f"{t.get('spacer', 0)} 個")
-                col.metric("中身セット 合計", f"{t.get('nakami', 0)} 個")
-                col.metric("金具打ち 合計", f"{t.get('kanagu', 0)} 個")
-                col.metric("仕上げ 合計", f"{t.get('shiage', 0)} 個")
-                col.metric("完成 合計", f"{t.get('kanryo', 0)} 個")
+                # 【修正のポイント】1列ずつ指定（col[0], col[1]..）して、エラーを完全に発生させない安全なカード表示に変更しました
+                cols = st.columns(7)
+                cols[0].metric("棹カット 合計", f"{t.get('katto', 0)} 個")
+                cols[1].metric("枠組み 合計", f"{t.get('waku', 0)} 個")
+                cols[2].metric("スペーサー 合計", f"{t.get('spacer', 0)} 個")
+                cols[3].metric("中身セット 合計", f"{t.get('nakami', 0)} 個")
+                cols[4].metric("金具打ち 合計", f"{t.get('kanagu', 0)} 個")
+                cols[5].metric("仕上げ 合計", f"{t.get('shiage', 0)} 個")
+                cols[6].metric("完成 合計", f"{t.get('kanryo', 0)} 個")
                 
                 st.markdown("---")
                 st.metric("🧱 全ライン総合計数", f"{t.get('grandTotal', 0)} 個")
