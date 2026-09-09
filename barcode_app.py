@@ -5,13 +5,13 @@ import time
 st.set_page_config(page_title="生産現場用 バーコード在庫登録システム", layout="centered")
 
 st.title("🏭 生産現場用 バーコード在庫登録システム")
-st.write("新レイアウト対応版（担当者更新・常時在庫表示・修正選択仕様）")
+st.write("新レイアウト対応版（担当者更新・上下両方でリアルタイム在庫表示仕様）")
 
 # ★吉本さんの本物のGASウェブアプリURLをここに貼り付けてください★
 gas_url = "https://google.com" 
 
 # -------------------------------------------------------------
-# 0. 担当者の選択（ご指定の16名を追加、手動で変えるまで維持）
+# 0. 担当者の選択（変えるまで維持）
 # -------------------------------------------------------------
 if "selected_user" not in st.session_state:
     st.session_state.selected_user = "吉本"
@@ -24,10 +24,8 @@ user_list = [
 user_name = st.selectbox("👤 本日の登録者を選択してください", user_list, index=user_list.index(st.session_state.selected_user))
 st.session_state.selected_user = user_name
 
-st.markdown("### =======================================")
-
 # =============================================================
-# 【上半分】いままで通りの「新規加算 登録エリア」
+# 【上半分】通常の「新規加算 登録エリア」
 # =============================================================
 st.subheader("📥 1. 通常の数量加算（新規登録）")
 
@@ -36,13 +34,19 @@ if "reg_category" not in st.session_state:
 
 reg_category = st.radio(
     "👇 数量を加算したい項目を選択してください",
-    ("生産途中", "スペーサー加工待ち", "半受注完成品", "在庫数量"),
+    ("生産途中", "スペーサー加工待ち", "半受注完成品", "製造指示依頼"),
     horizontal=True,
     key="reg_cat_radio"
 )
 
 if "trigger_clear_reg" not in st.session_state:
     st.session_state.trigger_clear_reg = False
+if "reg_stock_data" not in st.session_state:
+    st.session_state.reg_stock_data = None
+if "reg_item_name" not in st.session_state:
+    st.session_state.reg_item_name = ""
+if "last_reg_jan" not in st.session_state:
+    st.session_state.last_reg_jan = ""
 
 reg_key = "jan_reg_active"
 if st.session_state.trigger_clear_reg:
@@ -50,28 +54,54 @@ if st.session_state.trigger_clear_reg:
     st.session_state.trigger_clear_reg = False
 
 jan_reg = st.text_input("👉 加算するバーコード（JAN）をスキャン：", value="", key=reg_key)
+
+# 上半分でJANがスキャンされたら即座に在庫を取得
+if jan_reg and jan_reg.strip() != "" and jan_reg.strip() != st.session_state.last_reg_jan:
+    current_reg_jan = jan_reg.strip()
+    st.session_state.last_reg_jan = current_reg_jan
+    try:
+        res = requests.post(gas_url, json={"janCode": current_reg_jan, "status": "生産途中", "count": 0, "user": user_name, "action": "check"}, timeout=10).json()
+        if res.get("status") == "success":
+            st.session_state.reg_item_name = res.get("itemName", "商品名不明")
+            st.session_state.reg_stock_data = res.get("stockData")
+    except:
+        pass
+
+if st.session_state.reg_item_name:
+    st.info(f"📦 対象商品: **{st.session_state.reg_item_name}**")
+    if st.session_state.reg_stock_data:
+        st.write("📊 **現在のシート内 在庫数（加算前の確認用）**")
+        col_reg1, col_reg2, col_reg3 = st.columns(3)
+        col_reg1.metric("スペーサー加工待ち", f"{st.session_state.reg_stock_data['spacer']} 個")
+        col_reg2.metric("生産途中", f"{st.session_state.reg_stock_data['seisan']} 個")
+        col_reg3.metric("半受注完成品", f"{st.session_state.reg_stock_data['hanjyu']} 個")
+
 count_reg = st.slider("👉 加算する数量をスクロールで入力：", min_value=1, max_value=100, value=1, key="count_reg_slider")
 
 if st.button("🚀 上記の項目に数量を加算する", use_container_width=True):
-    if jan_reg.strip() != "":
+    if st.session_state.last_reg_jan != "":
         with st.spinner("クラウドに数量を加算中..."):
             try:
-                payload = {"janCode": jan_reg.strip(), "status": reg_category, "count": count_reg, "user": user_name, "action": "register"}
+                payload = {"janCode": st.session_state.last_reg_jan, "status": reg_category, "count": count_reg, "user": user_name, "action": "register"}
                 res = requests.post(gas_url, json=payload, timeout=10).json()
                 if res.get("status") == "success":
                     st.success(f"✅ 【{reg_category}】に数量 {count_reg} 個を加算登録しました！")
                     time.sleep(2)
                     st.session_state.trigger_clear_reg = True
+                    st.session_state.reg_stock_data = None
+                    st.session_state.reg_item_name = ""
+                    st.session_state.last_reg_jan = ""
                     st.rerun()
                 else:
                     st.error(f"❌ エラー：{res.get('message')}")
             except Exception as e:
                 st.error(f"🚨 通信エラー: {str(e)}")
 
-st.markdown("### =======================================")
+st.write(" ")
+st.write(" ")
 
 # =============================================================
-# 【下半分】常時在庫状況 表示 ＆ 修正する 選択エリア
+# 【下半分】常時在庫状況 表示 ＆ 修正する 選択エリア（★不具合完全修復★）
 # =============================================================
 st.subheader("🔍 2. 現在の在庫状況 確認・直接修正")
 
@@ -91,6 +121,7 @@ if st.session_state.trigger_clear_mod:
 
 jan_mod = st.text_input("🔍 在庫を確認するバーコード（JAN）をスキャン：", value="", key=mod_key)
 
+# 【修正】下半分専用の独立した処理で、JANスキャン時に即座にデータを取得
 if jan_mod and jan_mod.strip() != "" and jan_mod.strip() != st.session_state.last_mod_jan:
     current_jan = jan_mod.strip()
     st.session_state.last_mod_jan = current_jan
@@ -102,6 +133,7 @@ if jan_mod and jan_mod.strip() != "" and jan_mod.strip() != st.session_state.las
     except:
         pass
 
+# 【修正】下半分でスキャンしたデータがある場合、毎回常時メーターを表示
 if st.session_state.mod_item_name:
     st.info(f"📦 対象商品: **{st.session_state.mod_item_name}**")
     if st.session_state.mod_stock_data:
@@ -115,9 +147,10 @@ if st.session_state.mod_item_name:
     
     is_modify_mode = st.checkbox("✏️ 登録数量を直接上書き修正する", value=False)
 
+    # 「修正する」にチェックが入った時だけ、修正用UIとスクロールバー（スライダー）が出現
     if is_modify_mode:
         st.write("🔧 **数量の直接上書き修正モード**")
-        mod_category = st.radio("👇 修正したい項目（コマンド）を選択してください", ("スペーサー加工待ち", "生産途中", "半受注完成品", "在庫数量"), horizontal=True, key="mod_cat_radio")
+        mod_category = st.radio("👇 修正したい項目（コマンド）を選択してください", ("スペーサー加工待ち", "生産途中", "半受注完成品", "製造指示依頼"), horizontal=True, key="mod_cat_radio")
 
         default_mod_count = 0
         if st.session_state.mod_stock_data:
@@ -125,6 +158,7 @@ if st.session_state.mod_item_name:
             elif mod_category == "生産途中": default_mod_count = int(st.session_state.mod_stock_data['seisan'])
             elif mod_category == "半受注完成品": default_mod_count = int(st.session_state.mod_stock_data['hanjyu'])
 
+        # 【修正】数量入力をご希望通りのスクロール式（スライダー）に完全復活
         count_mod = st.slider(f"👉 【 {mod_category} 】の正しい数量を指定してください", min_value=0, max_value=200, value=default_mod_count, key="count_mod_slider")
 
         btn_col1, btn_col2 = st.columns(2)
