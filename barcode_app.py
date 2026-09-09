@@ -8,7 +8,7 @@ st.title("🏭 生産現場用 バーコード在庫登録システム")
 st.write("新レイアウト対応版（担当者更新・上下両方でリアルタイム在庫表示仕様）")
 
 # ★吉本さんの本物のGASウェブアプリURLをここに貼り付けてください★
-gas_url = "https://google.com" 
+gas_url = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN34zs2XxrEaCe64Gl-1uthsF7qzn89fh36J0FH1/exec" 
 
 # -------------------------------------------------------------
 # 0. 担当者の選択（変えるまで維持）
