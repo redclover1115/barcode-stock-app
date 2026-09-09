@@ -7,7 +7,7 @@ st.title("🎰 工程在庫管理スロットアプリ")
 st.write("7工程ジャンプ完全対応・独立型3DくるくるスロットUIモデル")
 
 # 1. 共通GAS URL
-GAS_URL = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN34zs2XxrEaCe64Gl-1uthsF7qzn89fh36J0FH1/exec"
+GAS_URL = "https://google.com"
 
 # リストの定義
 users = ["吉本", "塚越", "岡本", "中島", "関口", "石森", "堀越", "田代", "塩原", "吉田", "杉山", "南雲", "A", "B", "アルミ", "アクリル"]
@@ -51,11 +51,9 @@ def create_slot_picker(label, options, key, default_idx=0):
         
         function updateTransform() {{
             container.style.transform = `translateY(${{-activeIdx * 30}}px)`;
-            // 【重要】ドラムロールが止まった「確定値」をリアルタイムに親（Streamlit）のセッションへ引き渡す
             window.parent.postMessage({{type: 'streamlit:setComponentValue', value: list[activeIdx], key: '{key}'}}, '*');
         }}
         
-        // ページ読み込み完了後に確実に最初の値を同期させる
         setTimeout(updateTransform, 200);
         
         let isDragging = false; let startY = 0;
@@ -73,7 +71,7 @@ def create_slot_picker(label, options, key, default_idx=0):
         }});
         window.addEventListener('mouseup', () => isDragging = false);
         
-        // スマホスワイプ（画面全体のスクロールを強制ブロックして独立回転）
+        // スマホスワイプ
         wrapper.addEventListener('touchstart', (e) => {{ 
             startY = e.touches.clientY; 
             isDragging = true;
@@ -137,16 +135,12 @@ st.subheader("📥 1. 通常の数量加算（新規登録）")
 create_slot_picker("🚩 移動先の工程スロット", processes, "v_status", 0)
 jan_code = st.text_input("📋 加算するバーコード（JAN）をスキャン：", key="jan_reg_input")
 
-# 【修正ポイント】1から始まるリスト（1〜100）を用意
 counts_reg = [str(i) for i in range(1, 101)]
-create_slot_picker("➕ 登録数量スロット", counts_reg, "v_count", 0) # デフォルト1個
+create_slot_picker("➕ 登録数量スロット", counts_reg, "v_count", 0)
 
-# 【バグ修正】ボタンを押した瞬間に、スロットコンポーネントから「現在選ばれているテキスト」を確実に取得して数値化する
 if st.button("🎰 上記の内容で通常加算登録をする", key="btn_register"):
     user_name = st.session_state.get("v_user", "未選択")
     status = st.session_state.get("v_status", "棹カット")
-    
-    # 文字列としてセッションに入っているため、安全に数値（整数型）へ変換する
     count_val = int(st.session_state.get("v_count", "1"))
     
     if not jan_code:
@@ -176,7 +170,7 @@ if st.session_state.get("mismatch_detected", False):
     
     counts_reason = [str(i) for i in range(0, 101)]
     create_slot_picker("📉 1. 出荷された数", counts_reason, "v_shikka", 0)
-    create_slot_picker("📉 2. 不良の数", counts_reason, "v_furyo", 0)
+    create_slot_picker("📉 2. 不良 of 数", counts_reason, "v_furyo", 0)
     create_slot_picker("📉 3. その他の数", counts_reason, "v_sonota", 0)
     
     if st.button("内訳を確定して再送信"):
@@ -222,3 +216,12 @@ if st.button("数値を直接上書き修正（修正・削除用）", key="btn_
                 res = requests.post(GAS_URL, json=payload_modify).json()
                 if res.get("status") == "success":
                     st.success(f"⭕ 上書き修正が完了しました！【{res.get('itemName')}】")
+                    display_stock_and_total(res, "📊 最新の在庫・合計状況")
+                else:
+                    st.error(f"エラー: {res.get('message')}")
+            except Exception as e:
+                st.error(f"通信エラー: {e}")
+
+st.markdown("---")
+
+# =========================================================
