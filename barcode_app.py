@@ -1,5 +1,5 @@
-import streamlit as st
-import streamlit.components.v1 as components
+import streamlit st
+import streamlit.components.v1 components
 import requests
 import json
 
@@ -7,7 +7,7 @@ st.title("🎰 工程在庫管理スロットアプリ")
 st.write("7工程ジャンプ完全対応・独立型3DくるくるスロットUIモデル")
 
 # 1. 共通GAS URL
-GAS_URL = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN34zs2XxrEaCe64Gl-1uthsF7qzn89fh36J0FH1/exec"
+GAS_URL = "https://google.com"
 
 # リストの定義
 users = ["吉本", "塚越", "岡本", "中島", "関口", "石森", "堀越", "田代", "塩原", "吉田", "杉山", "南雲", "A", "B", "アルミ", "アクリル"]
@@ -152,6 +152,8 @@ if st.button("🎰 上記の内容で通常加算登録をする", key="btn_regi
                     st.session_state["mismatch_detected"] = True
                     st.session_state["prev_details"] = res["details"]
                     st.session_state["original_payload"] = payload
+                else:
+                    st.error(f"エラー: {res.get('message')}")
             except Exception as e:
                 st.error(f"通信エラー: {e}")
 
@@ -227,3 +229,14 @@ if st.button("現在の在庫状況を確認する", key="btn_check"):
     if not jan_code_check:
         st.warning("⚠️ JANコードをスキャンしてください。")
     else:
+        payload_check = { "janCode": jan_code_check, "action": "check" }
+        with st.spinner("スプレッドシートから現在の在庫を取得中..."):
+            try:
+                res = requests.post(GAS_URL, json=payload_check).json()
+                if res.get("status") == "success":
+                    st.info(f"📦 **商品名**: {res.get('itemName')}")
+                    display_stock_and_total(res)
+                else:
+                    st.error(f"エラー: {res.get('message')}")
+            except Exception as e:
+                st.error(f"通信エラー: {e}")
