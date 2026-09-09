@@ -5,7 +5,7 @@ import requests
 # ※ payload には janCode, status, count, user, action が入っている想定です
 
 # GASのWebアプリURL（お使いのURLに差し替えてください）
-GAS_URL = "https://google.com..." 
+GAS_URL = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN34zs2XxrEaCe64Gl-1uthsF7qzn89fh36J0FH1/exec" 
 
 # 初回送信ボタンが押されたときの処理（例）
 if st.button("上記の項目に数量を加算する"):
