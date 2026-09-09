@@ -5,10 +5,10 @@ import time
 st.set_page_config(page_title="生産現場用 バーコード在庫登録システム", layout="centered")
 
 st.title("🏭 生産現場用 バーコード在庫登録システム")
-st.write("新レイアウト対応版（担当者更新・上下両方でリアルタイム在庫表示仕様）")
+st.write("新レイアウト対応版（担当者更新・上下両方でリアルタイム在庫表示・全体合計仕様）")
 
 # ★吉本さんの本物のGASウェブアプリURLをここに貼り付けてください★
-gas_url = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN34zs2XxrEaCe64Gl-1uthsF7qzn89fh36J0FH1/exec" 
+gas_url = "https://google.com" 
 
 # -------------------------------------------------------------
 # 0. 担当者の選択（変えるまで維持）
@@ -64,9 +64,12 @@ if jan_reg and jan_reg.strip() != "" and jan_reg.strip() != st.session_state.las
         if res.get("status") == "success":
             st.session_state.reg_item_name = res.get("itemName", "商品名不明")
             st.session_state.reg_stock_data = res.get("stockData")
+            st.session_state.mod_item_name = res.get("itemName", "商品名不明")
+            st.session_state.mod_stock_data = res.get("stockData")
     except:
         pass
 
+# 上半分用の在庫メーター表示
 if st.session_state.reg_item_name:
     st.info(f"📦 対象商品: **{st.session_state.reg_item_name}**")
     if st.session_state.reg_stock_data:
@@ -101,7 +104,7 @@ st.write(" ")
 st.write(" ")
 
 # =============================================================
-# 【下半分】常時在庫状況 表示 ＆ 修正する 選択エリア（★不具合完全修復★）
+# 【下半分】常時在庫状況 表示 ＆ 修正する 選択エリア
 # =============================================================
 st.subheader("🔍 2. 現在の在庫状況 確認・直接修正")
 
@@ -121,7 +124,6 @@ if st.session_state.trigger_clear_mod:
 
 jan_mod = st.text_input("🔍 在庫を確認するバーコード（JAN）をスキャン：", value="", key=mod_key)
 
-# 【修正】下半分専用の独立した処理で、JANスキャン時に即座にデータを取得
 if jan_mod and jan_mod.strip() != "" and jan_mod.strip() != st.session_state.last_mod_jan:
     current_jan = jan_mod.strip()
     st.session_state.last_mod_jan = current_jan
@@ -130,10 +132,11 @@ if jan_mod and jan_mod.strip() != "" and jan_mod.strip() != st.session_state.las
         if res.get("status") == "success":
             st.session_state.mod_item_name = res.get("itemName", "商品名不明")
             st.session_state.mod_stock_data = res.get("stockData")
+            st.session_state.reg_item_name = res.get("itemName", "商品名不明")
+            st.session_state.reg_stock_data = res.get("stockData")
     except:
         pass
 
-# 【修正】下半分でスキャンしたデータがある場合、毎回常時メーターを表示
 if st.session_state.mod_item_name:
     st.info(f"📦 対象商品: **{st.session_state.mod_item_name}**")
     if st.session_state.mod_stock_data:
@@ -147,7 +150,6 @@ if st.session_state.mod_item_name:
     
     is_modify_mode = st.checkbox("✏️ 登録数量を直接上書き修正する", value=False)
 
-    # 「修正する」にチェックが入った時だけ、修正用UIとスクロールバー（スライダー）が出現
     if is_modify_mode:
         st.write("🔧 **数量の直接上書き修正モード**")
         mod_category = st.radio("👇 修正したい項目（コマンド）を選択してください", ("スペーサー加工待ち", "生産途中", "半受注完成品", "製造指示依頼"), horizontal=True, key="mod_cat_radio")
@@ -158,7 +160,6 @@ if st.session_state.mod_item_name:
             elif mod_category == "生産途中": default_mod_count = int(st.session_state.mod_stock_data['seisan'])
             elif mod_category == "半受注完成品": default_mod_count = int(st.session_state.mod_stock_data['hanjyu'])
 
-        # 【修正】数量入力をご希望通りのスクロール式（スライダー）に完全復活
         count_mod = st.slider(f"👉 【 {mod_category} 】の正しい数量を指定してください", min_value=0, max_value=200, value=default_mod_count, key="count_mod_slider")
 
         btn_col1, btn_col2 = st.columns(2)
@@ -185,3 +186,41 @@ if st.session_state.mod_item_name:
                 st.session_state.mod_item_name = ""
                 st.session_state.last_mod_jan = ""
                 st.rerun()
+
+st.write(" ")
+st.write(" ")
+
+# =============================================================
+# 【最下部】★今回追加した「3．全体の在庫状況（確認用）」エリア★
+# =============================================================
+st.markdown("---")
+is_show_total = st.checkbox("📈 3．全体の在庫状況（確認用）を表示する", value=False)
+
+if is_show_total:
+    # 直前のデータがある場合のみ計算して表示
+    active_stock_data = st.session_state.mod_stock_data if st.session_state.mod_stock_data else st.session_state.reg_stock_data
+    active_item_name = st.session_state.mod_item_name if st.session_state.mod_item_name else st.session_state.reg_item_name
+    
+    if active_stock_data:
+        st.subheader("📋 3．全体の在庫状況（確認用）")
+        st.write(f"📦 対象商品: **{active_item_name}**")
+        
+        # 4つの値を安全に取得（無い場合は0として扱う）
+        spacer_count = int(active_stock_data.get('spacer', 0))
+        seisan_count = int(active_stock_data.get('seisan', 0))
+        hanjyu_count = int(active_stock_data.get('hanjyu', 0))
+        zaiko_count = int(active_stock_data.get('zaiko', 0)) # GAS側から返るF列の数値
+        
+        # ★全体合計の計算（4つの項目をすべて足し算）
+        total_count = spacer_count + seisan_count + hanjyu_count + zaiko_count
+        
+        # 4つの項目を横並びで表示
+        col_t1, col_t2, col_t3, col_t4 = st.columns(4)
+        col_t1.metric("スペーサー加工待ち", f"{spacer_count} 個")
+        col_t2.metric("生産途中", f"{seisan_count} 個")
+        col_t3.metric("半受注完成品", f"{hanjyu_count} 個")
+        col_t4.metric("製造指示依頼", f"{zaiko_count} 個")
+        
+        # 全体合計を下に大きくアピールして表示
+        st.info(f"📊 **4項目すべての全体合計: {total_count} 個**")
+    else:
