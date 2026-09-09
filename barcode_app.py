@@ -14,9 +14,8 @@ counts_reg = [i for i in range(1, 101)]     # 1〜100
 counts_modify = [i for i in range(0, 501)]  # 0〜500
 counts_reason = [i for i in range(0, 101)]  # 0〜100
 
-# --- 🎰 100%絶対に回り、データも1列もズレないドラム選択UI ---
+# --- 🎰 純正風スクロール選択UI ---
 def create_secure_drum(label, options, key, default_idx=0):
-    # Streamlit標準のセレクトボックスを、CSSで縦に並ぶドラムロール（くるくる風）に最適化
     st.markdown(
         """
         <style>
@@ -39,11 +38,10 @@ def create_secure_drum(label, options, key, default_idx=0):
     selected_value = st.selectbox(f"**{label}**", options, index=default_idx, key=key)
     return selected_value
 
-# 📊 日本語カード形式での共通在庫表示関数
+# 📊 指定の仕様に合わせた新しい在庫表示関数
 def display_stock_and_total(res_data, title="📊 現在の在庫状況"):
     st.write(f"### {title}")
     s = res_data.get("stockData", {})
-    t = res_data.get("grandTotalData", {})
     
     st.write("**◆ 今回のアイテムの工程内訳**")
     c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
@@ -55,16 +53,11 @@ def display_stock_and_total(res_data, title="📊 現在の在庫状況"):
     c6.metric("仕上げ", f"{s.get('shiage',0)}個")
     c7.metric("完成", f"{s.get('kanryo',0)}個")
     
-    st.write("**◆ 工場全体の総合計（7工程合計）**")
-    col = st.columns(8)
-    col.metric("棹カット計", f"{t.get('katto',0)}個")
-    col.metric("枠組み計", f"{t.get('waku',0)}個")
-    col.metric("スペーサー計", f"{t.get('spacer',0)}個")
-    col.metric("中身計", f"{t.get('nakami',0)}個")
-    col.metric("金具計", f"{t.get('kanagu',0)}個")
-    col.metric("仕上げ計", f"{t.get('shiage',0)}個")
-    col.metric("完成計", f"{t.get('kanryo',0)}個")
-    col.metric("🧱 総合計", f"{t.get('grandTotal',0)}個")
+    # 【仕様変更】生産棚在庫（受注生産品完成在庫の全体合計）を個別の目立つ大型カードで表示
+    st.markdown("---")
+    st.write("**◆ 工場全体の在庫集計**")
+    tana_zaiko = res_data.get("seisanTanaZaiko", 0)
+    st.metric("📦 生産棚在庫 (完成品合計)", f"{tana_zaiko} 個")
 
 # メイン画面構築：担当者選択
 user_name = create_secure_drum("👤 担当者選択（スクロール選択）", users, "v_user", 0)
@@ -78,7 +71,7 @@ st.subheader("📥 1. 通常の数量加算（新規登録）")
 
 status = create_secure_drum("🚩 移動先の工程を選択（スクロール）", processes, "v_status_reg", 0)
 jan_code = st.text_input("📋 加算するバーコード（JAN）をスキャン：", key="jan_reg_input")
-count_val = create_secure_drum("➕ 登録数量を選択（スクロール）", counts_reg, "v_count_reg", 0) # デフォルト1個
+count_val = create_secure_drum("➕ 登録数量を選択（スクロール）", counts_reg, "v_count_reg", 0)
 
 if st.button("🎰 上記の内容で通常加算登録をする", key="btn_register"):
     if not jan_code:
