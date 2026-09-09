@@ -4,8 +4,8 @@ import requests
 st.title("🎰 工程在庫管理スロットアプリ")
 st.write("7工程ジャンプ完全対応・自動在庫先読みUIモデル")
 
-# 1. 共通GAS URL
-GAS_URL = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN34zs2XxrEaCe64Gl-1uthsF7qzn89fh36J0FH1/exec"
+# 1. 共通GAS URL (ご自身のウェブアプリURLに差し替えてください)
+GAS_URL = "https://google.com"
 
 # リストの定義
 users = ["吉本", "塚越", "岡本", "中島", "関口", "石森", "堀越", "田代", "塩原", "吉田", "杉山", "南雲", "A", "B", "アルミ", "アクリル"]
@@ -162,7 +162,7 @@ if st.button("数値を直接上書き修正（修正・削除用）", key="btn_
 st.markdown("---")
 
 # =========================================================
-# 📋 3. 生産ライン上の各工程合計数（★大改造：A / B / A+B 三連表示仕様）
+# 📋 3. 生産ライン上の各工程合計数
 # =========================================================
 st.subheader("📋 3. 生産ライン上の各工程合計数")
 st.write("ボタンを押すと、工場全データ（1万行）の各工程ごとの縦一列の純粋な合計値をリアルタイム集計します。")
@@ -176,7 +176,6 @@ if st.button("📊 工場全体の各工程合計数を集計する", key="btn_c
                 t = res.get("grandTotalData", {})
                 st.success("📊 工場全体の純粋な各工程合計数の集計が完了しました！")
                 
-                # 7工程個別の詳細カード表示
                 cols = st.columns(7)
                 cols[0].metric("棹カット 合計", f"{t.get('katto', 0)} 個")
                 cols[1].metric("枠組み 合計", f"{t.get('waku', 0)} 個")
@@ -188,7 +187,6 @@ if st.button("📊 工場全体の各工程合計数を集計する", key="btn_c
                 
                 st.markdown("---")
                 
-                # 【新仕様】最下部の3大指標を横並びで表示
                 total_cols = st.columns(3)
                 total_cols[0].metric("🏭 各工程合計数(A)", f"{t.get('totalA', 0)} 個")
                 total_cols[1].metric("📦 生産課管理棚合計数(B)", f"{t.get('totalB', 0)} 個")
