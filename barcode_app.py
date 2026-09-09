@@ -64,8 +64,6 @@ if jan_reg and jan_reg.strip() != "" and jan_reg.strip() != st.session_state.las
         if res.get("status") == "success":
             st.session_state.reg_item_name = res.get("itemName", "商品名不明")
             st.session_state.reg_stock_data = res.get("stockData")
-            st.session_state.mod_item_name = res.get("itemName", "商品名不明")
-            st.session_state.mod_stock_data = res.get("stockData")
     except:
         pass
 
@@ -132,8 +130,6 @@ if jan_mod and jan_mod.strip() != "" and jan_mod.strip() != st.session_state.las
         if res.get("status") == "success":
             st.session_state.mod_item_name = res.get("itemName", "商品名不明")
             st.session_state.mod_stock_data = res.get("stockData")
-            st.session_state.reg_item_name = res.get("itemName", "商品名不明")
-            st.session_state.reg_stock_data = res.get("stockData")
     except:
         pass
 
@@ -191,13 +187,12 @@ st.write(" ")
 st.write(" ")
 
 # =============================================================
-# 【最下部】★今回追加した「3．全体の在庫状況（確認用）」エリア★
+# 【最下部】3．全体の在庫状況（確認用）エリア
 # =============================================================
 st.markdown("---")
 is_show_total = st.checkbox("📈 3．全体の在庫状況（確認用）を表示する", value=False)
 
 if is_show_total:
-    # 直前のデータがある場合のみ計算して表示
     active_stock_data = st.session_state.mod_stock_data if st.session_state.mod_stock_data else st.session_state.reg_stock_data
     active_item_name = st.session_state.mod_item_name if st.session_state.mod_item_name else st.session_state.reg_item_name
     
@@ -205,22 +200,23 @@ if is_show_total:
         st.subheader("📋 3．全体の在庫状況（確認用）")
         st.write(f"📦 対象商品: **{active_item_name}**")
         
-        # 4つの値を安全に取得（無い場合は0として扱う）
         spacer_count = int(active_stock_data.get('spacer', 0))
         seisan_count = int(active_stock_data.get('seisan', 0))
         hanjyu_count = int(active_stock_data.get('hanjyu', 0))
-        zaiko_count = int(active_stock_data.get('zaiko', 0)) # GAS側から返るF列の数値
         
-        # ★全体合計の計算（4つの項目をすべて足し算）
+        # 修正版：GAS側からF列（製造指示依頼）のデータを安全に読み込む処理
+        zaiko_count = 0
+        if 'zaiko' in active_stock_data:
+            zaiko_count = int(active_stock_data['zaiko'])
+        
         total_count = spacer_count + seisan_count + hanjyu_count + zaiko_count
         
-        # 4つの項目を横並びで表示
         col_t1, col_t2, col_t3, col_t4 = st.columns(4)
         col_t1.metric("スペーサー加工待ち", f"{spacer_count} 個")
         col_t2.metric("生産途中", f"{seisan_count} 個")
         col_t3.metric("半受注完成品", f"{hanjyu_count} 個")
         col_t4.metric("製造指示依頼", f"{zaiko_count} 個")
         
-        # 全体合計を下に大きくアピールして表示
         st.info(f"📊 **4項目すべての全体合計: {total_count} 個**")
     else:
+        st.warning("⚠️ 上記の入力欄(1または2)にバーコードを一度スキャンすると、ここに全体合計が自動計算されます。")
