@@ -38,7 +38,7 @@ def create_secure_drum(label, options, key, default_idx=0):
     selected_value = st.selectbox(f"**{label}**", options, index=default_idx, key=key)
     return selected_value
 
-# 📊 【勘違い防止版】登録したJANコード単品の「7工程内訳」と「見込データ」を表示する関数
+# 📊 登録したJANコード単品の「7工程内訳」と「見込データ」を表示する関数
 def display_stock_only(res_data, title="📊 現在の在庫状況"):
     st.write(f"#### {title}")
     s = res_data.get("stockData", {})
@@ -62,15 +62,14 @@ def display_stock_only(res_data, title="📊 現在の在庫状況"):
     m_stock = res_data.get("mikomiStock", "0")
     m_hikiate = res_data.get("mikomiHikiate", "0")
     
-    # ーーー 💡 現場の勘違いを防ぐ自動表記判別ロジック ーーー
     def format_disp_value(val):
-        val_str = str(val).trim() if hasattr(str(val), 'trim') else str(val).strip()
+        val_str = str(val).strip()
         if val_str == "0" or val_str == "" or val_str == "0.0":
-            return "無し" # 空欄や0のときは親切に「無し」と出す
+            return "無し"
         elif "受注品" in val_str:
-            return "受注品" # 受注品の文字ならそのまま
+            return "受注品"
         else:
-            return f"{val_str} 個" # 数字が入っているときだけ「〇〇 個」と出す
+            return f"{val_str} 個"
             
     disp_stock = format_disp_value(m_stock)
     disp_hikiate = format_disp_value(m_hikiate)
@@ -211,21 +210,23 @@ if st.button("📊 工場全体の各工程合計数を集計する", key="btn_c
                 t = res.get("grandTotalData", {})
                 st.success("📊 工場全体の純粋な各工程合計数の集計が完了しました！")
                 
+                # 7工程個別の詳細表示
                 cols = st.columns(7)
-                cols.metric("棹カット 合計", f"{t.get('katto', 0)} 個")
-                cols.metric("枠組み 合計", f"{t.get('waku', 0)} 個")
-                cols.metric("スペーサー 合計", f"{t.get('spacer', 0)} 個")
-                cols.metric("中身セット 合計", f"{t.get('nakami', 0)} 個")
-                cols.metric("金具打ち 合計", f"{t.get('kanagu', 0)} 個")
-                cols.metric("仕上げ 合計", f"{t.get('shiage', 0)} 個")
-                cols.metric("完成 合計", f"{t.get('kanryo', 0)} 個")
+                cols[0].metric("棹カット 合計", f"{t.get('katto', 0)} 個")
+                cols[1].metric("枠組み 合計", f"{t.get('waku', 0)} 個")
+                cols[2].metric("スペーサー 合計", f"{t.get('spacer', 0)} 個")
+                cols[3].metric("中身セット 合計", f"{t.get('nakami', 0)} 個")
+                cols[4].metric("金具打ち 合計", f"{t.get('kanagu', 0)} 個")
+                cols[5].metric("仕上げ 合計", f"{t.get('shiage', 0)} 個")
+                cols[6].metric("完成 合計", f"{t.get('kanryo', 0)} 個")
                 
                 st.markdown("---")
                 
+                # 【重要バグ修正完了】リストのインデックス([0], [1], [2])を完璧に割り当て、エラーを絶対に防ぐ表示に直しました
                 total_cols = st.columns(3)
-                total_cols.metric("🏭 各工程合計数(A)", f"{t.get('totalA', 0)} 個")
-                total_cols.metric("📦 生産課管理棚合計数(B)", f"{t.get('totalB', 0)} 個")
-                total_cols.metric("🧱 総合計(A+B)", f"{t.get('totalAB', 0)} 個")
+                total_cols[0].metric("🏭 各工程合計数(A)", f"{t.get('totalA', 0)} 個")
+                total_cols[1].metric("📦 生産課管理棚合計数(B)", f"{t.get('totalB', 0)} 個")
+                total_cols[2].metric("🧱 総合計(A+B)", f"{t.get('totalAB', 0)} 個")
                 
             else:
                 st.error(f"エラー: {res.get('message')}")
