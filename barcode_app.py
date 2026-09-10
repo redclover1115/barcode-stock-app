@@ -208,26 +208,3 @@ if st.button("数値を直接上書き修正（修正・削除用）", key="btn_
                     st.error(f"エラー: {res.get('message')}")
             except Exception as e:
                 st.error(f"通信エラー: {e}")
-
-st.markdown("---")
-
-# =========================================================
-# 📋 3. 生産ライン上の各工程合計数（★構文・エラー完全根絶版）
-# =========================================================
-st.subheader("📋 3. 生産ライン上の各工程合計数")
-st.write("ボタンを押すと、工場全データ（1万行）の各工程ごとの縦一列の純粋な合計値をリアルタイム集計します。")
-
-if st.button("📊 工場全体の各工程合計数を集計する", key="btn_check_total"):
-    payload_total = { "janCode": "", "action": "check_total" }
-    with st.spinner("工場全体の全1万行データを一括集計中..."):
-        try:
-            res = requests.post(GAS_URL, json=payload_total).json()
-            if res.get("status") == "success":
-                t = res.get("grandTotalData", {})
-                st.success("📊 工場全体の純粋な各工程合計数の集計が完了しました！")
-                
-                st.write(f"・棹カット 合計: **{t.get('katto', 0)}** 個")
-                st.write(f"・枠組み 合計: **{t.get('waku', 0)}** 個")
-                st.write(f"・スペーサー 合計: **{t.get('spacer', 0)}** 個")
-                st.write(f"・中身セット 合計: **{t.get('nakami', 0)}** 個")
-                st.write(f"・金具打ち 合計: **{t.get('kanagu', 0)}** 個")
