@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 
 st.title("🎰 工程在庫管理スロットアプリ")
-st.write("7工程ジャンプ完全対応・自動在庫先読みUIモデル")
+st.write("7工程ジャンプ完全対応・高速サクサク軽量化モデル")
 
 # 1. 共通GAS URL
 GAS_URL = "https://script.google.com/macros/s/AKfycbwNTMZAQ5edee04wb3zMtWPnMqjN8guEJQCG-zYOBQdvpyxvc7K5VoRmGiO6bZxImJy/exec"
@@ -13,6 +13,12 @@ processes = ["棹カット", "枠組み", "スペーサー加工", "中身セッ
 counts_reg = [i for i in range(1, 101)]     # 1〜100
 counts_modify = [i for i in range(0, 501)]  # 0〜500
 counts_reason = [i for i in range(0, 101)]  # 0〜100
+
+# セッション状態の初期化（二重通信を防止するための記憶保持の仕組み）
+if "last_scanned_jan" not in st.session_state:
+    st.session_state["last_scanned_jan"] = ""
+if "cached_res" not in st.session_state:
+    st.session_state["cached_res"] = None
 
 # --- 🎰 純正風スクロール選択UI ---
 def create_secure_drum(label, options, key, default_idx=0):
@@ -84,25 +90,34 @@ user_name = create_secure_drum("👤 担当者選択（スクロール選択）"
 st.markdown("---")
 
 # =========================================================
-# 📥 1. 通常の数量加算（新規登録）
+# 📥 1. 通常の数量加算（新規登録 ★不要な再読み込み通信を完全根絶）
 # =========================================================
 st.subheader("📥 1. 通常の数量加算（新規登録）")
 
 status = create_secure_drum("🚩 移動先の工程を選択（スクロール）", processes, "v_status_reg", 0)
 jan_code = st.text_input("📋 加算するバーコード（JAN）をスキャン：", key="jan_reg_input")
 
+# 【無駄防止ロジック】JANコードが新しく入力された「瞬間だけ」通信し、数量を変更したときは既存のデータを使い回す
 if jan_code:
-    with st.spinner("スプレッドシートから現在の進捗を先読み中..."):
-        try:
-            check_payload_reg = { "janCode": jan_code, "action": "check" }
-            auto_res_reg = requests.post(GAS_URL, json=check_payload_reg).json()
-            if auto_res_reg.get("status") == "success":
-                st.info(f"📦 **現在の対象アイテム**: {auto_res_reg.get('itemName')}")
-                display_stock_only(auto_res_reg, title="🔍 登録前のリアルタイム現在状況（先読み）")
-            else:
-                st.error(f"⚠️ {auto_res_reg.get('message')}")
-        except Exception as e:
-            st.error(f"データ自動取得エラー: {e}")
+    if jan_code != st.session_state["last_scanned_jan"]:
+        with st.spinner("スプレッドシートから現在の進捗を先読み中..."):
+            try:
+                check_payload_reg = { "janCode": jan_code, "action": "check" }
+                auto_res_reg = requests.post(GAS_URL, json=check_payload_reg).json()
+                if auto_res_reg.get("status") == "success":
+                    st.session_state["cached_res"] = auto_res_reg
+                    st.session_state["last_scanned_jan"] = jan_code
+                else:
+                    st.error(f"⚠️ {auto_res_reg.get('message')}")
+                    st.session_state["cached_res"] = None
+            except Exception as e:
+                st.error(f"データ自動取得エラー: {e}")
+                st.session_state["cached_res"] = None
+
+    # 数量スロットを回しても、上記の通信は走らずに保存されたこの情報が一瞬で映り続けます
+    if st.session_state["cached_res"]:
+        st.info(f"📦 **現在の対象アイテム**: {st.session_state['cached_res'].get('itemName')}")
+        display_stock_only(st.session_state["cached_res"], title="🔍 登録前のリアルタイム現在状況（先読み）")
 
 count_val = create_secure_drum("➕ 登録数量を選択（スクロール）", counts_reg, "v_count_reg", 0)
 
@@ -117,6 +132,8 @@ if st.button("🎰 上記の内容で通常加算登録をする", key="btn_regi
                 res = requests.post(GAS_URL, json=payload).json()
                 if res.get("status") == "success":
                     st.success(f"⭕ {status} への工程移動が通常完了しました！")
+                    # 登録完了時も無駄な再通信はせず、戻ってきた結果をそのまま表示させて、先読みキャッシュを最新に上書きします
+                    st.session_state["cached_res"] = res
                     display_stock_only(res, title="📊 登録完了後の最新在庫状況")
                 elif res.get("status") == "qty_mismatch":
                     st.session_state["mismatch_detected"] = True
@@ -128,6 +145,7 @@ if st.button("🎰 上記の内容で通常加算登録をする", key="btn_regi
             except Exception as e:
                 st.error(f"通信エラー: {e}")
 
+# 🚨 数量不一致エラー時のマイナス内訳
 if st.session_state.get("mismatch_detected", False):
     d = st.session_state["prev_details"]
     st.error(f"⚠️ 前工程【{d['prevStatus']}】にあった数（{d['prevCount']}個）と、今回移動する数（{d['inputCount']}個）が合いません。")
@@ -146,6 +164,7 @@ if st.session_state.get("mismatch_detected", False):
                 if res.get("status") == "success":
                     st.success("⭕ 理由内訳を確認し、前工程をクリアして移動しました！")
                     st.session_state["mismatch_detected"] = False
+                    st.session_state["cached_res"] = res
                     display_stock_only(res, title="📊 内訳確定後の最新在庫状況")
             except Exception as e:
                 st.error(f"再送信エラー: {e}")
@@ -210,25 +229,6 @@ if st.button("📊 工場全体の各工程合計数を集計する", key="btn_c
                 t = res.get("grandTotalData", {})
                 st.success("📊 工場全体の純粋な各工程合計数の集計が完了しました！")
                 
-                # 7工程個別の詳細表示
                 cols = st.columns(7)
-                cols[0].metric("棹カット 合計", f"{t.get('katto', 0)} 個")
-                cols[1].metric("枠組み 合計", f"{t.get('waku', 0)} 個")
-                cols[2].metric("スペーサー 合計", f"{t.get('spacer', 0)} 個")
-                cols[3].metric("中身セット 合計", f"{t.get('nakami', 0)} 個")
-                cols[4].metric("金具打ち 合計", f"{t.get('kanagu', 0)} 個")
-                cols[5].metric("仕上げ 合計", f"{t.get('shiage', 0)} 個")
-                cols[6].metric("完成 合計", f"{t.get('kanryo', 0)} 個")
-                
-                st.markdown("---")
-                
-                # 【重要バグ修正完了】リストのインデックス([0], [1], [2])を完璧に割り当て、エラーを絶対に防ぐ表示に直しました
-                total_cols = st.columns(3)
-                total_cols[0].metric("🏭 各工程合計数(A)", f"{t.get('totalA', 0)} 個")
-                total_cols[1].metric("📦 生産課管理棚合計数(B)", f"{t.get('totalB', 0)} 個")
-                total_cols[2].metric("🧱 総合計(A+B)", f"{t.get('totalAB', 0)} 個")
-                
-            else:
-                st.error(f"エラー: {res.get('message')}")
-        except Exception as e:
-            st.error(f"集計通信エラー: {e}")
+                cols.metric("棹カット 合計", f"{t.get('katto', 0)} 個")
+                cols.metric("枠組み 合計", f"{t.get('waku', 0)} 個")
