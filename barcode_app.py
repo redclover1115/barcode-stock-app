@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 
 st.title("🎰 工程在庫管理スロットアプリ")
-st.write("7工程ジャンプ完全対応・自動在庫先読みUIモデル")
+st.write("7工程ジャンプ完全対応・W先読み＆自動在庫連動UIモデル")
 
 # 1. 共通GAS URL
 GAS_URL = "https://script.google.com/macros/s/AKfycbwNTMZAQ5edee04wb3zMtWPnMqjN8guEJQCG-zYOBQdvpyxvc7K5VoRmGiO6bZxImJy/exec"
@@ -38,7 +38,7 @@ def create_secure_drum(label, options, key, default_idx=0):
     selected_value = st.selectbox(f"**{label}**", options, index=default_idx, key=key)
     return selected_value
 
-# 📊 【機能拡張版】在庫・棚状況を表示する共通関数（見込データ2点を追加）
+# 📊 在庫・棚状況を表示する共通関数
 def display_stock_and_total(res_data, title="📊 現在の在庫状況"):
     st.write(f"#### {title}")
     s = res_data.get("stockData", {})
@@ -55,7 +55,6 @@ def display_stock_and_total(res_data, title="📊 現在の在庫状況"):
     
     st.markdown("---")
     
-    # 【追加機能】前回までの「生産棚在庫」の真横に、見込生産の在庫数(V列)と引当可能数(W列)のカードを美しく配置
     st.write("**◆ 見込生産・棚在庫の連動状況**")
     t1, t2, t3 = st.columns(3)
     tana_zaiko = res_data.get("seisanTanaZaiko", 0)
@@ -72,12 +71,27 @@ user_name = create_secure_drum("👤 担当者選択（スクロール選択）"
 st.markdown("---")
 
 # =========================================================
-# 📥 1. 通常の数量加算（新規登録）
+# 📥 1. 通常の数量加算（新規登録 ★大改造：JAN読み込み時自動先読み搭載）
 # =========================================================
 st.subheader("📥 1. 通常の数量加算（新規登録）")
 
 status = create_secure_drum("🚩 移動先の工程を選択（スクロール）", processes, "v_status_reg", 0)
 jan_code = st.text_input("📋 加算するバーコード（JAN）をスキャン：", key="jan_reg_input")
+
+# 【新機能】1番の登録画面でも、JANがスキャンされた瞬間に自動で在庫状況を暴き出す
+if jan_code:
+    with st.spinner("スプレッドシートから現在の進捗・見込在庫を先読み中..."):
+        try:
+            check_payload_reg = { "janCode": jan_code, "action": "check" }
+            auto_res_reg = requests.post(GAS_URL, json=check_payload_reg).json()
+            if auto_res_reg.get("status") == "success":
+                st.info(f"📦 **現在の対象アイテム**: {auto_res_reg.get('itemName')}")
+                display_stock_and_total(auto_res_reg, title="🔍 登録前のリアルタイム現在状況（先読み）")
+            else:
+                st.error(f"⚠️ {auto_res_reg.get('message')}")
+        except Exception as e:
+            st.error(f"データ自動取得エラー: {e}")
+
 count_val = create_secure_drum("➕ 登録数量を選択（スクロール）", counts_reg, "v_count_reg", 0)
 
 if st.button("🎰 上記の内容で通常加算登録をする", key="btn_register"):
@@ -90,8 +104,8 @@ if st.button("🎰 上記の内容で通常加算登録をする", key="btn_regi
             try:
                 res = requests.post(GAS_URL, json=payload).json()
                 if res.get("status") == "success":
-                    st.success(f"⭕ {status} への工程移動が通常完了しました！【商品名: {res.get('itemName')}】")
-                    display_stock_and_total(res)
+                    st.success(f"⭕ {status} への工程移動が通常完了しました！")
+                    display_stock_and_total(res, title="📊 登録完了後の最新在庫状況")
                 elif res.get("status") == "qty_mismatch":
                     st.session_state["mismatch_detected"] = True
                     st.session_state["prev_details"] = res["details"]
@@ -121,7 +135,7 @@ if st.session_state.get("mismatch_detected", False):
                 if res.get("status") == "success":
                     st.success("⭕ 理由内訳を確認し、前工程をクリアして移動しました！")
                     st.session_state["mismatch_detected"] = False
-                    display_stock_and_total(res)
+                    display_stock_and_total(res, title="📊 内訳確定後の最新在庫状況")
             except Exception as e:
                 st.error(f"再送信エラー: {e}")
         else:
