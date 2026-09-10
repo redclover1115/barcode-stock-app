@@ -69,47 +69,63 @@ with col_cnt:
 
 st.markdown("### 📦 バーコードスキャン位置")
 
-# スキャナー読み込み時のバックエンド高速処理
-def handle_scan():
+# 【改良】スキャンした瞬間に「まず現在の在庫を読み込んで確認する」ためのバックエンド関数
+def check_item_status():
     raw_jan = st.session_state["jan_barcode_input_field"]
     if raw_jan:
+        try:
+            # 数量を更新させないよう、action: "check" でGASからデータのみを安全に引っ張る
+            res = requests.post(GAS_URL, json={"janCode": raw_jan, "action": "check"})
+            res_data = res.json()
+            if res_data.get("status") == "success":
+                st.session_state["cached_res"] = res_data
+                st.session_state["last_scanned_jan"] = raw_jan
+                st.session_state["current_item_name"] = res_data.get("itemName", "商品名未設定")
+            elif res_data.get("status") == "not_found":
+                st.error("入力されたJANコードはマスタに見つかりません。")
+                st.session_state["current_item_name"] = ""
+                st.session_state["cached_res"] = None
+        except Exception as e:
+            st.error(f"データ取得失敗: {e}")
+
+# スキャン位置の入力欄（スキャンされると即座に上のcheck_item_statusが走り、品名と在庫を表示します）
+st.text_input(
+    "スキャナーのカーソルをここに合わせてスキャンしてください（読み込むと現在の在庫情報を表示します）", 
+    key="jan_barcode_input_field", 
+    on_change=check_item_status
+)
+
+# ーーー 💡 スキャンした時点で「商品名」と「在庫メーター」が即座に出るエリア ーーー
+if st.session_state["current_item_name"]:
+    st.write(f"**🔍 選択中のアイテム (JAN: {st.session_state['last_scanned_jan']}) ： {st.session_state['current_item_name']}**")
+
+if st.session_state["cached_res"]:
+    display_stock_only(st.session_state["cached_res"])
+    
+    # ーーー 💡 【新設】確認した後に手動でドスンと更新をかける「登録ボタン」 ーーー
+    st.markdown(" ")
+    if st.button("📥 この内容で移動登録を実行する", key="btn_execute_real_register", type="primary"):
         payload = {
-            "janCode": raw_jan,
+            "janCode": st.session_state["last_scanned_jan"],
             "status": selected_proc,
             "count": selected_count,
             "user": selected_user,
             "action": "register"
         }
         try:
-            res = requests.post(GAS_URL, json=payload)
-            res_data = res.json()
-            if res_data.get("status") == "success":
-                st.session_state["cached_res"] = res_data
-                st.session_state["last_scanned_jan"] = raw_jan
-                st.session_state["current_item_name"] = res_data.get("itemName", "商品名未設定")
-            elif res_data.get("status") == "qty_mismatch":
-                st.warning(f"警告: {res_data.get('message')}")
-            else:
-                st.error(f"エラー: {res_data.get('message')}")
+            with st.spinner("スプレッドシートの数量を更新中..."):
+                res = requests.post(GAS_URL, json=payload)
+                res_data = res.json()
+                if res_data.get("status") == "success":
+                    st.success(f"🎉 登録完了: 【{res_data.get('itemName')}】を「{selected_proc}」に {selected_count} 個登録しました。")
+                    # 登録完了後の最新在庫で画面を更新
+                    st.session_state["cached_res"] = res_data
+                elif res_data.get("status") == "qty_mismatch":
+                    st.warning(f"警告: {res_data.get('message')}")
+                else:
+                    st.error(f"エラー: {res_data.get('message')}")
         except Exception as e:
             st.error(f"通信失敗: {e}")
-        
-        st.session_state["jan_barcode_input_field"] = ""
-
-# スキャン位置の入力欄
-st.text_input(
-    "スキャナーのカーソルをここに合わせてスキャンしてください（読み込むと自動送信されます）", 
-    key="jan_barcode_input_field", 
-    on_change=handle_scan
-)
-
-# ーーー スキャン後、通常の文字サイズでシンプルに商品名を表示 ーーー
-if st.session_state["current_item_name"]:
-    st.write(f"**🔍 選択中のアイテム (JAN: {st.session_state['last_scanned_jan']}) ： {st.session_state['current_item_name']}**")
-
-# ーーー スキャン時に在庫メーターと3つの在庫数を自動表示 ーーー
-if st.session_state["cached_res"]:
-    display_stock_only(st.session_state["cached_res"])
 
 # =========================================================
 # ２．手動での在庫数量修正・変更
@@ -121,7 +137,6 @@ col_reason, col_modify = st.columns(2)
 with col_reason:
     selected_reason = create_secure_drum("移動修正理由を選択", reasons_modify, "reason_modify_select")
 with col_modify:
-    # 【改良】ラベルから（0〜500）の注記を完全に削除しました
     selected_modify_count = create_secure_drum("修正後の数量を選択", counts_modify, "count_modify_select", default_idx=0)
 
 if st.button("🚨 選択中の工程の数量をこの値に上書き修正する", key="execute_modify_action_btn"):
