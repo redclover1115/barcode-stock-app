@@ -50,22 +50,21 @@ def display_stock_only(res_data, title="📊 現在の在庫状況"):
     c7.metric("完成", f"{s.get('kanryo',0)}個")
     
     st.markdown("---")
-    # 連動して引かれるV列の数字と、X列の累積出庫数をシンプルに下に表示します
     st.write(f"💡 受注生産品完成在庫 (V列): **{res_data.get('mikomiStock', '0')}** 個  /  🚚 出庫数累計 (X列): **{s.get('shukko',0)}** 個")
 
-# ーーー 💡 【ここから復元】元の横並び３連ドラム ーーー
+# ーーー ① 通常の登録用メイン3連ドラム ーーー
 col_user, col_proc, col_cnt = st.columns(3)
 with col_user:
-    selected_user = create_secure_drum("① 作業者名を選択", users, "user_select")
+    selected_user = create_secure_drum("① 作業者名を選択", users, "user_select_main")
 with col_proc:
-    selected_proc = create_secure_drum("② 移動先の工程を選択", processes, "proc_select")
+    selected_proc = create_secure_drum("② 移動先の工程を選択", processes, "proc_select_main")
 with col_cnt:
-    selected_count = create_secure_drum("③ 数量を選択", counts_reg, "count_select", default_idx=0)
+    selected_count = create_secure_drum("③ 数量を選択", counts_reg, "count_select_main", default_idx=0)
 
 st.markdown("### 📦 バーコードスキャン位置")
 jan_input = st.text_input("スキャナーのカーソルをここに合わせてスキャンしてください", key="jan_barcode_input")
 
-# バーコードが読み込まれた瞬間に実行されるプログラム
+# 【1】JANコード通常スキャン登録時の処理
 if jan_input:
     payload = {
         "janCode": jan_input,
@@ -74,11 +73,9 @@ if jan_input:
         "user": selected_user,
         "action": "register"
     }
-    
     try:
         res = requests.post(GAS_URL, json=payload)
         res_data = res.json()
-        
         if res_data.get("status") == "success":
             st.success(f"処理成功: 【{res_data.get('itemName')}】を処理しました。")
             st.session_state["cached_res"] = res_data
@@ -88,11 +85,81 @@ if jan_input:
         else:
             st.error(f"エラー: {res_data.get('message')}")
     except Exception as e:
-        st.error(f"通信に失敗しました: {e}")
-        
-    # 入力後に自動でリロードして次のスキャンを待つ状態にする
+        st.error(f"通信失敗: {e}")
     st.rerun()
 
-# 過去のスキャン履歴データがある場合にメーターを表示
+# 直近のスキャン結果メーターを表示
 if st.session_state["cached_res"]:
     display_stock_only(st.session_state["cached_res"])
+
+# =========================================================
+# ⚙️ ２の処理内容：【手動数量修正エリア】（スキャン後に有効化）
+# =========================================================
+st.markdown("---")
+st.markdown("### 🔧 ２．手動での在庫数量修正・変更")
+
+col_reason, col_modify = st.columns(2)
+with col_reason:
+    # 定義されていた counts_reason をここで活用
+    selected_reason = create_secure_drum("移動修正理由を選択 (予備カウント)", counts_reason, "reason_modify_select")
+with col_modify:
+    # 定義されていた counts_modify をここで活用
+    selected_modify_count = create_secure_drum("修正後の数量を選択 (0〜500)", counts_modify, "count_modify_select", default_idx=0)
+
+if st.button("🚨 選択中の工程の数量をこの値に上書き修正する", key="execute_modify_action_btn"):
+    if not st.session_state["last_scanned_jan"]:
+        st.error("先に上の欄でバーコードをスキャンして、対象の商品を特定してください。")
+    else:
+        payload = {
+            "janCode": st.session_state["last_scanned_jan"],
+            "status": selected_proc, # 上のメインドラムで選ばれている工程の数量を上書きします
+            "count": selected_modify_count,
+            "user": selected_user,
+            "action": "modify"
+        }
+        try:
+            res = requests.post(GAS_URL, json=payload)
+            res_data = res.json()
+            if res_data.get("status") == "success":
+                st.success(f"修正成功: 【{res_data.get('itemName')}】の「{selected_proc}」の在庫数を {selected_modify_count} 個に変更しました。")
+                st.session_state["cached_res"] = res_data
+            else:
+                st.error(f"修正エラー: {res_data.get('message')}")
+        except Exception as e:
+            st.error(f"通信失敗: {e}")
+        st.rerun()
+
+# =========================================================
+# 📊 ３の処理内容：【希望時のみ動作する全工程の合計値算出機能】
+# =========================================================
+st.markdown("---")
+st.markdown("### 📊 ３．全工程の合計値算出（全体集計）")
+
+if st.button("📈 全商品の在庫合計値を集計して算出する", key="calculate_grand_total_btn"):
+    try:
+        with st.spinner("スプレッドシート全体のデータを集計中..."):
+            res = requests.post(GAS_URL, json={"action": "check_total"})
+            res_data = res.json()
+            
+            if res_data.get("status") == "success" and res_data.get("grandTotalData"):
+                g = res_data["grandTotalData"]
+                st.markdown("#### 🧮 算出された各工程の現在合計数")
+                
+                # スッキリ見せるために4列×2行で集計結果を表示
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("棹カット 合計", f"{g.get('katto', 0)} 個")
+                m2.metric("枠組み 合計", f"{g.get('waku', 0)} 個")
+                m3.metric("スペーサー 合計", f"{g.get('spacer', 0)} 個")
+                m4.metric("中身セット 合計", f"{g.get('nakami', 0)} 個")
+                
+                m5, m6, m7, m8 = st.columns(4)
+                m5.metric("金具打ち 合計", f"{g.get('kanagu', 0)} 個")
+                m6.metric("仕上げ 合計", f"{g.get('shiage', 0)} 個")
+                m7.metric("完成(S列) 合計", f"{g.get('kanryo', 0)} 個")
+                m8.metric("管理棚総数", f"{res_data.get('seisanTanaZaiko', 0)} 個")
+                
+                st.success("全体の集計算出が完了しました！")
+            else:
+                st.error("GAS側からの集計データの取得に失敗しました。")
+    except Exception as e:
+        st.error(f"合計値の算出通信に失敗しました: {e}")
