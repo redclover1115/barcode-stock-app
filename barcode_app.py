@@ -17,6 +17,9 @@ if "last_scanned_jan" not in st.session_state:
     st.session_state["last_scanned_jan"] = ""
 if "cached_res" not in st.session_state:
     st.session_state["cached_res"] = None
+# 【新規】特定された商品名を保持するセッション
+if "current_item_name" not in st.session_state:
+    st.session_state["current_item_name"] = ""
 
 def create_secure_drum(label, options, key, default_idx=0):
     st.markdown(
@@ -63,12 +66,12 @@ with col_cnt:
 
 st.markdown("### 📦 バーコードスキャン位置")
 
-# フォーム機能を使って、Enterが押された瞬間だけ安全に通信を走らせる仕組みに変更
+# フォーム機能でEnter時の二重ループを防止
 with st.form(key="scan_form", clear_on_submit=True):
     jan_input = st.text_input("スキャナーのカーソルをここに合わせてスキャンしてください", value="")
-    submit_button = st.form_submit_button(label="スキャン確定（手動入力用）", help="スキャナー使用時は自動で送信されます")
+    submit_button = st.form_submit_button(label="スキャン確定（手動入力用）")
 
-# スキャナーが読み込んだ（またはフォームが送信された）時の処理
+# スキャナーが読み込んだ時の処理
 if submit_button and jan_input:
     payload = {
         "janCode": jan_input,
@@ -84,6 +87,8 @@ if submit_button and jan_input:
             st.success(f"処理成功: 【{res_data.get('itemName')}】を処理しました。")
             st.session_state["cached_res"] = res_data
             st.session_state["last_scanned_jan"] = jan_input
+            # 【新規】GASから返ってきた商品名をセッションに保存
+            st.session_state["current_item_name"] = res_data.get("itemName", "商品名未設定")
         elif res_data.get("status") == "qty_mismatch":
             st.warning(f"警告: {res_data.get('message')}")
         else:
@@ -91,12 +96,24 @@ if submit_button and jan_input:
     except Exception as e:
         st.error(f"通信失敗: {e}")
 
+# 【新規】JAN読み込み後に商品名を最優先で大きく目立つように表示するエリア
+if st.session_state["current_item_name"]:
+    st.markdown(
+        f"""
+        <div style="background-color: #eaf2ff; padding: 15px; border-left: 5px solid #2b6cb0; border-radius: 4px; margin-bottom: 15px;">
+            <p style="margin: 0; font-size: 14px; color: #4a5568; font-weight: bold;">🔍 選択中のアイテム（JAN: {st.session_state['last_scanned_jan']}）</p>
+            <h2 style="margin: 5px 0 0 0; color: #2b6cb0; font-weight: bold;">{st.session_state['current_item_name']}</h2>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
 # 直近のスキャン結果メーターを表示
 if st.session_state["cached_res"]:
     display_stock_only(st.session_state["cached_res"])
 
 # =========================================================
-# ⚙️ ２の処理内容：【手動数量修正エリア】
+# ⚙️ ２．手動数量修正エリア
 # =========================================================
 st.markdown("---")
 st.markdown("### 🔧 ２．手動での在庫数量修正・変更")
@@ -124,13 +141,14 @@ if st.button("🚨 選択中の工程の数量をこの値に上書き修正す�
             if res_data.get("status") == "success":
                 st.success(f"修正成功: 【{res_data.get('itemName')}】の「{selected_proc}」の在庫数を {selected_modify_count} 個に変更しました。")
                 st.session_state["cached_res"] = res_data
+                st.session_state["current_item_name"] = res_data.get("itemName", "商品名未設定")
             else:
                 st.error(f"修正エラー: {res_data.get('message')}")
         except Exception as e:
             st.error(f"通信失敗: {e}")
 
 # =========================================================
-# 📊 ３の処理内容：【希望時のみ動作する全工程の合計値算出機能】
+# 📊 ３．全工程の合計値算出（全体集計）
 # =========================================================
 st.markdown("---")
 st.markdown("### 📊 ３．全工程の合計値算出（全体集計）")
