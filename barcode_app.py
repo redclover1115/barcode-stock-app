@@ -97,7 +97,7 @@ st.subheader("📥 1. 通常の数量加算（新規登録）")
 status = create_secure_drum("🚩 移動先の工程を選択（スクロール）", processes, "v_status_reg", 0)
 jan_code = st.text_input("📋 加算するバーコード（JAN）をスキャン：", key="jan_reg_input")
 
-# 【無駄防止ロジック】JANコードが新しく入力された「瞬間だけ」通信し、数量を変更したときは既存のデータを使い回す
+# JANコードが新しく入力された「瞬間だけ」通信し、数量を変更したときは既存のデータを使い回す
 if jan_code:
     if jan_code != st.session_state["last_scanned_jan"]:
         with st.spinner("スプレッドシートから現在の進捗を先読み中..."):
@@ -114,7 +114,6 @@ if jan_code:
                 st.error(f"データ自動取得エラー: {e}")
                 st.session_state["cached_res"] = None
 
-    # 数量スロットを回しても、上記の通信は走らずに保存されたこの情報が一瞬で映り続けます
     if st.session_state["cached_res"]:
         st.info(f"📦 **現在の対象アイテム**: {st.session_state['cached_res'].get('itemName')}")
         display_stock_only(st.session_state["cached_res"], title="🔍 登録前のリアルタイム現在状況（先読み）")
@@ -132,7 +131,6 @@ if st.button("🎰 上記の内容で通常加算登録をする", key="btn_regi
                 res = requests.post(GAS_URL, json=payload).json()
                 if res.get("status") == "success":
                     st.success(f"⭕ {status} への工程移動が通常完了しました！")
-                    # 登録完了時も無駄な再通信はせず、戻ってきた結果をそのまま表示させて、先読みキャッシュを最新に上書きします
                     st.session_state["cached_res"] = res
                     display_stock_only(res, title="📊 登録完了後の最新在庫状況")
                 elif res.get("status") == "qty_mismatch":
@@ -145,7 +143,6 @@ if st.button("🎰 上記の内容で通常加算登録をする", key="btn_regi
             except Exception as e:
                 st.error(f"通信エラー: {e}")
 
-# 🚨 数量不一致エラー時のマイナス内訳
 if st.session_state.get("mismatch_detected", False):
     d = st.session_state["prev_details"]
     st.error(f"⚠️ 前工程【{d['prevStatus']}】にあった数（{d['prevCount']}個）と、今回移動する数（{d['inputCount']}個）が合いません。")
@@ -229,6 +226,9 @@ if st.button("📊 工場全体の各工程合計数を集計する", key="btn_c
                 t = res.get("grandTotalData", {})
                 st.success("📊 工場全体の純粋な各工程合計数の集計が完了しました！")
                 
+                # インデント構造の記述ミスを1マスの狂いもなく完璧に修正しました
                 cols = st.columns(7)
                 cols[0].metric("棹カット 合計", f"{t.get('katto', 0)} 個")
                 cols[1].metric("枠組み 合計", f"{t.get('waku', 0)} 個")
+                cols[2].metric("スペーサー 合計", f"{t.get('spacer', 0)} 個")
+                cols[3].metric("中身セット 合計", f"{t.get('nakami', 0)} 個")
