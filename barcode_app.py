@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 
 st.title("🎰 工程在庫管理スロットアプリ")
-st.write("7工程ジャンプ完全対応・W先読み＆自動在庫連動UIモデル")
+st.write("7工程ジャンプ完全対応・自動在庫先読みUIモデル")
 
 # 1. 共通GAS URL
 GAS_URL = "https://script.google.com/macros/s/AKfycbwNTMZAQ5edee04wb3zMtWPnMqjN8guEJQCG-zYOBQdvpyxvc7K5VoRmGiO6bZxImJy/exec"
@@ -38,12 +38,12 @@ def create_secure_drum(label, options, key, default_idx=0):
     selected_value = st.selectbox(f"**{label}**", options, index=default_idx, key=key)
     return selected_value
 
-# 📊 在庫・棚状況を表示する共通関数
-def display_stock_and_total(res_data, title="📊 現在の在庫状況"):
+# 📊 登録したJANコードのみの数量（7工程内訳）を表示する関数
+def display_stock_only(res_data, title="📊 現在の在庫状況"):
     st.write(f"#### {title}")
     s = res_data.get("stockData", {})
     
-    st.write("**◆ 今回のアイテムの工程内訳**")
+    st.write("**◆ 今回のスキャンアイテムの工程内訳**")
     c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
     c1.metric("棹カット", f"{s.get('katto',0)}個")
     c2.metric("枠組み", f"{s.get('wakugumi',0)}個")
@@ -52,18 +52,6 @@ def display_stock_and_total(res_data, title="📊 現在の在庫状況"):
     c5.metric("金具打ち", f"{s.get('kanagu',0)}個")
     c6.metric("仕上げ", f"{s.get('shiage',0)}個")
     c7.metric("完成", f"{s.get('kanryo',0)}個")
-    
-    st.markdown("---")
-    
-    st.write("**◆ 見込生産・棚在庫の連動状況**")
-    t1, t2, t3 = st.columns(3)
-    tana_zaiko = res_data.get("seisanTanaZaiko", 0)
-    mikomi_stock = res_data.get("mikomiStock", 0)
-    mikomi_hikiate = res_data.get("mikomiHikiate", 0)
-    
-    t1.metric("📦 生産棚在庫 ", f"{tana_zaiko} 個")
-    t2.metric("📈 見込生産在庫数 ", f"{mikomi_stock} 個")
-    t3.metric("⏳ 見込生産引当可能数 ", f"{mikomi_hikiate} 個")
 
 # メイン画面：担当者選択
 user_name = create_secure_drum("👤 担当者選択（スクロール選択）", users, "v_user", 0)
@@ -71,22 +59,23 @@ user_name = create_secure_drum("👤 担当者選択（スクロール選択）"
 st.markdown("---")
 
 # =========================================================
-# 📥 1. 通常の数量加算（新規登録 ★大改造：JAN読み込み時自動先読み搭載）
+# 📥 1. 通常の数量加算（新規登録）
 # =========================================================
 st.subheader("📥 1. 通常の数量加算（新規登録）")
 
 status = create_secure_drum("🚩 移動先の工程を選択（スクロール）", processes, "v_status_reg", 0)
 jan_code = st.text_input("📋 加算するバーコード（JAN）をスキャン：", key="jan_reg_input")
 
-# 【新機能】1番の登録画面でも、JANがスキャンされた瞬間に自動で在庫状況を暴き出す
+# JANコードが入力されたら、自動でそのアイテムのみの在庫状況を読み込む
 if jan_code:
-    with st.spinner("スプレッドシートから現在の進捗・見込在庫を先読み中..."):
+    with st.spinner("スプレッドシートから現在の進捗を先読み中..."):
         try:
             check_payload_reg = { "janCode": jan_code, "action": "check" }
             auto_res_reg = requests.post(GAS_URL, json=check_payload_reg).json()
             if auto_res_reg.get("status") == "success":
                 st.info(f"📦 **現在の対象アイテム**: {auto_res_reg.get('itemName')}")
-                display_stock_and_total(auto_res_reg, title="🔍 登録前のリアルタイム現在状況（先読み）")
+                # 三連カード(完成品、V、W)は排除し、純粋なスキャンしたJANの7工程内訳のみを先読み表示
+                display_stock_only(auto_res_reg, title="🔍 登録前のリアルタイム現在状況（先読み）")
             else:
                 st.error(f"⚠️ {auto_res_reg.get('message')}")
         except Exception as e:
@@ -105,7 +94,8 @@ if st.button("🎰 上記の内容で通常加算登録をする", key="btn_regi
                 res = requests.post(GAS_URL, json=payload).json()
                 if res.get("status") == "success":
                     st.success(f"⭕ {status} への工程移動が通常完了しました！")
-                    display_stock_and_total(res, title="📊 登録完了後の最新在庫状況")
+                    # 登録結果も工場全体合計は出さず、登録したJANのみの最新数量をパッと表示
+                    display_stock_only(res, title="📊 登録完了後の最新在庫状況")
                 elif res.get("status") == "qty_mismatch":
                     st.session_state["mismatch_detected"] = True
                     st.session_state["prev_details"] = res["details"]
@@ -135,7 +125,7 @@ if st.session_state.get("mismatch_detected", False):
                 if res.get("status") == "success":
                     st.success("⭕ 理由内訳を確認し、前工程をクリアして移動しました！")
                     st.session_state["mismatch_detected"] = False
-                    display_stock_and_total(res, title="📊 内訳確定後の最新在庫状況")
+                    display_stock_only(res, title="📊 内訳確定後の最新在庫状況")
             except Exception as e:
                 st.error(f"再送信エラー: {e}")
         else:
@@ -158,7 +148,7 @@ if jan_code_modify:
             auto_res = requests.post(GAS_URL, json=check_payload).json()
             if auto_res.get("status") == "success":
                 st.info(f"📦 **現在の登録アイテム**: {auto_res.get('itemName')}")
-                display_stock_and_total(auto_res, title="🔍 先読みされた現在のリアルタイム在庫状況")
+                display_stock_only(auto_res, title="🔍 先読みされた現在のリアルタイム在庫状況")
             else:
                 st.error(f"⚠️ {auto_res.get('message')}")
         except Exception as e:
@@ -176,7 +166,7 @@ if st.button("数値を直接上書き修正（修正・削除用）", key="btn_
                 res = requests.post(GAS_URL, json=payload_modify).json()
                 if res.get("status") == "success":
                     st.success("⭕ 上書き修正が完了しました！")
-                    display_stock_and_total(res, "📊 修正反映後の在庫・棚状況")
+                    display_stock_only(res, "📊 修正反映後の在庫・棚状況")
                 else:
                     st.error(f"エラー: {res.get('message')}")
             except Exception as e:
