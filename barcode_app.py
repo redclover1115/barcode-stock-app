@@ -65,13 +65,12 @@ with col_cnt:
 
 st.markdown("### 📦 バーコードスキャン位置")
 
-# スキャン確定ボタンを完全に無くし、「Enter」または「スキャナーの自動送信」のみで動くフォーム
+# スキャナー連動フォーム（確定ボタンなしでEnter自動送信）
 with st.form(key="scan_form", clear_on_submit=True):
     jan_input = st.text_input("スキャナーのカーソルをここに合わせてスキャンしてください（読み込むと自動送信されます）", value="")
-    # 隠し送信トリガー（Streamlitの仕様上、フォーム内でのEnter送信に必要ですがボタンの見た目は消去します）
     st.form_submit_button(label="送信", disabled=True, type="primary")
 
-# 【重要】スキャナーが読み込んだ瞬間に実行（ボタンなしでEnter信号を検知）
+# スキャナーが読み込んだ瞬間に実行
 if jan_input:
     payload = {
         "janCode": jan_input,
@@ -94,23 +93,20 @@ if jan_input:
     except Exception as e:
         st.error(f"通信失敗: {e}")
 
-# ーーー 💡 スキャンした時点で「商品名」と「在庫メーター」が即座に出るエリア ーーー
+# ーーー 💡 【ご要望①】JANを読み込んだ時点で即座に商品名が最優先で出るボックス ーーー
 if st.session_state["current_item_name"]:
     st.markdown(
         f"""
-        <div style="background-color: #eaf2ff; padding: 15px; border-left: 5px solid #2b6cb0; border-radius: 4px; margin-top: 10px; margin-bottom: 15px;">
-            <p style="margin: 0; font-size: 14px; color: #4a5568; font-weight: bold;">🔍 選択中のアイテム（JAN: {st.session_state['last_scanned_jan']}）</p>
+        <div style="background-color: #eaf2ff; padding: 15px; border-left: 5px solid #2b6cb0; border-radius: 4px; margin-top: 10px; margin-bottom: 10px;">
+            <p style="margin: 0; font-size: 14px; color: #4a5568; font-weight: bold;">🔍 読み込み中のアイテム（JAN: {st.session_state['last_scanned_jan']}）</p>
             <h2 style="margin: 5px 0 0 0; color: #2b6cb0; font-weight: bold;">{st.session_state['current_item_name']}</h2>
         </div>
         """,
         unsafe_allow_html=True
     )
 
-if st.session_state["cached_res"]:
-    display_stock_only(st.session_state["cached_res"])
-
-# 確定ボタンの代わりに配置した「画面更新ボタン」
-if st.button("🔄 画面情報を更新（最新の在庫を再読込）", key="btn_reload_last_status"):
+# ーーー 💡 【ご要望②】「在庫状況を表示」ボタンに名称変更 ーーー
+if st.button("📊 在庫状況を表示（最新データに更新）", key="btn_show_and_reload_stock"):
     if st.session_state["last_scanned_jan"]:
         try:
             res = requests.post(GAS_URL, json={"janCode": st.session_state["last_scanned_jan"], "action": "check"})
@@ -118,11 +114,15 @@ if st.button("🔄 画面情報を更新（最新の在庫を再読込）", key=
             if res_data.get("status") == "success":
                 st.session_state["cached_res"] = res_data
                 st.session_state["current_item_name"] = res_data.get("itemName", "商品名未設定")
-                st.success("最新の在庫状況を読み込みました。")
+                st.success("最新の在庫状況を表示しました。")
         except Exception as e:
-            st.error(f"再読込失敗: {e}")
+            st.error(f"在庫状況の取得に失敗しました: {e}")
     else:
-        st.warning("まだバーコードがスキャンされていません。")
+        st.warning("まだバーコードがスキャンされていません。先に上の入力位置でスキャンを行ってください。")
+
+# ボタン押下時、またはキャッシュ保持時にメーターを表示
+if st.session_state["cached_res"]:
+    display_stock_only(st.session_state["cached_res"])
 
 # =========================================================
 # ⚙️ ２．手動数量修正エリア
