@@ -7,7 +7,8 @@ st.markdown("### １．工程間移動登録")
 GAS_URL = "https://script.google.com/macros/s/AKfycbwNTMZAQ5edee04wb3zMtWPnMqjN8guEJQCG-zYOBQdvpyxvc7K5VoRmGiO6bZxImJy/exec"
 
 users = ["吉本", "塚越", "岡本", "中島", "関口", "石森", "堀越", "田代", "塩原", "吉田", "杉山", "南雲", "A", "B", "アルミ", "アクリル"]
-processes = ["棹カット", "枠組み", "スペーサー加工", "中身セット", "金具打ち", "仕上げ", "完成", "出庫"]
+# 【改良】移動先の工程に「受注生産品完成在庫」を追加（内部処理はS列の「完成」に紐づきます）
+processes = ["棹カット", "枠組み", "スペーサー加工", "中身セット", "金具打ち", "仕上げ", "完成", "受注生産品完成在庫", "出庫"]
 counts_reg = [i for i in range(1, 101)]
 counts_modify = [i for i in range(0, 501)]
 reasons_modify = ["不良", "先行出荷", "その他"]
@@ -69,12 +70,11 @@ with col_cnt:
 
 st.markdown("### 📦 バーコードスキャン位置")
 
-# 【改良】スキャンした瞬間に「まず現在の在庫を読み込んで確認する」ためのバックエンド関数
+# スキャンした瞬間に「まず現在の在庫を読み込んで確認する」ためのバックエンド関数
 def check_item_status():
     raw_jan = st.session_state["jan_barcode_input_field"]
     if raw_jan:
         try:
-            # 数量を更新させないよう、action: "check" でGASからデータのみを安全に引っ張る
             res = requests.post(GAS_URL, json={"janCode": raw_jan, "action": "check"})
             res_data = res.json()
             if res_data.get("status") == "success":
@@ -88,26 +88,29 @@ def check_item_status():
         except Exception as e:
             st.error(f"データ取得失敗: {e}")
 
-# スキャン位置の入力欄（スキャンされると即座に上のcheck_item_statusが走り、品名と在庫を表示します）
+# スキャン位置の入力欄
+# 登録完了時に文字がクリアされるよう、セッション状態「jan_barcode_input_field」と直接連動させます
 st.text_input(
     "スキャナーのカーソルをここに合わせてスキャンしてください（読み込むと現在の在庫情報を表示します）", 
     key="jan_barcode_input_field", 
     on_change=check_item_status
 )
 
-# ーーー 💡 スキャンした時点で「商品名」と「在庫メーター」が即座に出るエリア ーーー
+# ーーー スキャンした時点で「商品名」と「在庫メーター」が即座に出るエリア ーーー
 if st.session_state["current_item_name"]:
     st.write(f"**🔍 選択中のアイテム (JAN: {st.session_state['last_scanned_jan']}) ： {st.session_state['current_item_name']}**")
 
 if st.session_state["cached_res"]:
     display_stock_only(st.session_state["cached_res"])
     
-    # ーーー 💡 【新設】確認した後に手動でドスンと更新をかける「登録ボタン」 ーーー
     st.markdown(" ")
     if st.button("📥 この内容で移動登録を実行する", key="btn_execute_real_register", type="primary"):
+        # 「受注生産品完成在庫」が選ばれている場合は、GAS側が対応している「完成」に名称を変換して送信
+        send_proc = "完成" if selected_proc == "受注生産品完成在庫" else selected_proc
+        
         payload = {
             "janCode": st.session_state["last_scanned_jan"],
-            "status": selected_proc,
+            "status": send_proc,
             "count": selected_count,
             "user": selected_user,
             "action": "register"
@@ -118,8 +121,16 @@ if st.session_state["cached_res"]:
                 res_data = res.json()
                 if res_data.get("status") == "success":
                     st.success(f"🎉 登録完了: 【{res_data.get('itemName')}】を「{selected_proc}」に {selected_count} 個登録しました。")
-                    # 登録完了後の最新在庫で画面を更新
-                    st.session_state["cached_res"] = res_data
+                    
+                    # 【改良】登録が無事に終わったら、次の連続スキャンのためにすべてのセッションデータを綺麗に消去
+                    st.session_state["jan_barcode_input_field"] = ""
+                    st.session_state["last_scanned_jan"] = ""
+                    st.session_state["current_item_name"] = ""
+                    st.session_state["cached_res"] = None
+                    
+                    # 画面を一瞬でリセットして入力フォーカスを戻す
+                    st.rerun()
+                    
                 elif res_data.get("status") == "qty_mismatch":
                     st.warning(f"警告: {res_data.get('message')}")
                 else:
@@ -144,10 +155,11 @@ if st.button("🚨 選択中の工程の数量をこの値に上書き修正す�
         st.error("先に上の欄でバーコードスキャンを行って商品を特定してください。")
     else:
         modified_user_name = f"{selected_user} [{selected_reason}]"
+        send_proc = "完成" if selected_proc == "受注生産品完成在庫" else selected_proc
         
         payload = {
             "janCode": st.session_state["last_scanned_jan"],
-            "status": selected_proc, 
+            "status": send_proc, 
             "count": selected_modify_count,
             "user": modified_user_name,
             "action": "modify"
