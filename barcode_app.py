@@ -38,7 +38,7 @@ def create_secure_drum(label, options, key, default_idx=0):
     selected_value = st.selectbox(f"**{label}**", options, index=default_idx, key=key)
     return selected_value
 
-# 📊 登録したJANコードのみの数量（7工程内訳）を表示する関数
+# 📊 【新仕様】登録したJANコード単品の「7工程内訳」と「見込データ3点」を表示する関数
 def display_stock_only(res_data, title="📊 現在の在庫状況"):
     st.write(f"#### {title}")
     s = res_data.get("stockData", {})
@@ -52,6 +52,21 @@ def display_stock_only(res_data, title="📊 現在の在庫状況"):
     c5.metric("金具打ち", f"{s.get('kanagu',0)}個")
     c6.metric("仕上げ", f"{s.get('shiage',0)}個")
     c7.metric("完成", f"{s.get('kanryo',0)}個")
+    
+    st.markdown("---")
+    
+    # 【修正ポイント】ここに出てくる3枚のカードも、スキャンしたJANコード（個別列）のデータのみを表示します
+    st.write("**◆ 今回のアイテムの見込生産・棚在庫の連動状況**")
+    t1, t2, t3 = st.columns(3)
+    
+    # アイテム個別のS列(完成品)、V列(見込在庫)、W列(引当可能数)の値を取得して表示
+    tana_zaiko = s.get("kanryo", 0) # 個別の完成品棚在庫(P列と同じですが、個別判定用に連動)
+    mikomi_stock = res_data.get("mikomiStock", 0)   # 個別アイテムのV列の数値
+    mikomi_hikiate = res_data.get("mikomiHikiate", 0) # 個別アイテムのW列の数値
+    
+    t1.metric("📦 生産棚在庫 ", f"{tana_zaiko} 個")
+    t2.metric("📈 見込生産在庫数 ", f"{mikomi_stock} 個")
+    t3.metric("⏳ 見込生産引当可能数 ", f"{mikomi_hikiate} 個")
 
 # メイン画面：担当者選択
 user_name = create_secure_drum("👤 担当者選択（スクロール選択）", users, "v_user", 0)
@@ -74,7 +89,6 @@ if jan_code:
             auto_res_reg = requests.post(GAS_URL, json=check_payload_reg).json()
             if auto_res_reg.get("status") == "success":
                 st.info(f"📦 **現在の対象アイテム**: {auto_res_reg.get('itemName')}")
-                # 三連カード(完成品、V、W)は排除し、純粋なスキャンしたJANの7工程内訳のみを先読み表示
                 display_stock_only(auto_res_reg, title="🔍 登録前のリアルタイム現在状況（先読み）")
             else:
                 st.error(f"⚠️ {auto_res_reg.get('message')}")
@@ -94,7 +108,6 @@ if st.button("🎰 上記の内容で通常加算登録をする", key="btn_regi
                 res = requests.post(GAS_URL, json=payload).json()
                 if res.get("status") == "success":
                     st.success(f"⭕ {status} への工程移動が通常完了しました！")
-                    # 登録結果も工場全体合計は出さず、登録したJANのみの最新数量をパッと表示
                     display_stock_only(res, title="📊 登録完了後の最新在庫状況")
                 elif res.get("status") == "qty_mismatch":
                     st.session_state["mismatch_detected"] = True
