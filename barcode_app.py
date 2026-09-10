@@ -14,7 +14,7 @@ counts_reg = [i for i in range(1, 101)]     # 1〜100
 counts_modify = [i for i in range(0, 501)]  # 0〜500
 counts_reason = [i for i in range(0, 101)]  # 0〜100
 
-# セッション状態の初期化（二重通信を防止するための記憶保持の仕組み）
+# セッション状態の初期化（二重通信を完全に防止するための仕組み）
 if "last_scanned_jan" not in st.session_state:
     st.session_state["last_scanned_jan"] = ""
 if "cached_res" not in st.session_state:
@@ -230,5 +230,5 @@ if st.button("📊 工場全体の各工程合計数を集計する", key="btn_c
                 st.success("📊 工場全体の純粋な各工程合計数の集計が完了しました！")
                 
                 cols = st.columns(7)
-                cols.metric("棹カット 合計", f"{t.get('katto', 0)} 個")
-                cols.metric("枠組み 合計", f"{t.get('waku', 0)} 個")
+                cols[0].metric("棹カット 合計", f"{t.get('katto', 0)} 個")
+                cols[1].metric("枠組み 合計", f"{t.get('waku', 0)} 個")
