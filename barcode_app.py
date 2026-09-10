@@ -14,7 +14,7 @@ counts_reg = [i for i in range(1, 101)]     # 1〜100
 counts_modify = [i for i in range(0, 501)]  # 0〜500
 counts_reason = [i for i in range(0, 101)]  # 0〜100
 
-# セッション状態の初期化（二重通信を完全に防止するための仕組み）
+# セッション状態の初期化
 if "last_scanned_jan" not in st.session_state:
     st.session_state["last_scanned_jan"] = ""
 if "cached_res" not in st.session_state:
@@ -44,7 +44,7 @@ def create_secure_drum(label, options, key, default_idx=0):
     selected_value = st.selectbox(f"**{label}**", options, index=default_idx, key=key)
     return selected_value
 
-# 📊 登録したJANコード単品の「7工程内訳」と「見込データ」を表示する関数
+# 📊 登録したJANコード単品の進捗を表示する関数
 def display_stock_only(res_data, title="📊 現在の在庫状況"):
     st.write(f"#### {title}")
     s = res_data.get("stockData", {})
@@ -90,14 +90,13 @@ user_name = create_secure_drum("👤 担当者選択（スクロール選択）"
 st.markdown("---")
 
 # =========================================================
-# 📥 1. 通常の数量加算（新規登録 ★不要な再読み込み通信を完全根滅）
+# 📥 1. 通常の数量加算（新規登録）
 # =========================================================
 st.subheader("📥 1. 通常の数量加算（新規登録）")
 
 status = create_secure_drum("🚩 移動先の工程を選択（スクロール）", processes, "v_status_reg", 0)
 jan_code = st.text_input("📋 加算するバーコード（JAN）をスキャン：", key="jan_reg_input")
 
-# JANコードが新しく入力された「瞬間だけ」通信し、数量を変更したときは既存のデータを使い回す
 if jan_code:
     if jan_code != st.session_state["last_scanned_jan"]:
         with st.spinner("スプレッドシートから現在の進捗を先読み中..."):
@@ -208,3 +207,28 @@ if st.button("数値を直接上書き修正（修正・削除用）", key="btn_
                     st.error(f"エラー: {res.get('message')}")
             except Exception as e:
                 st.error(f"通信エラー: {e}")
+
+st.markdown("---")
+
+# =========================================================
+# 📋 3. 生産ライン上の各工程合計数（★安全・フラット表示復活版）
+# =========================================================
+st.subheader("📋 3. 生産ライン上の各工程合計数")
+st.write("ボタンを押すと、工場全データ（1万行）の各工程ごとの縦一列の純粋な合計値をリアルタイム集計します。")
+
+if st.button("📊 工場全体の各工程合計数を集計する", key="btn_check_total"):
+    with st.spinner("工場全体の全1万行データを一括集計中..."):
+        try:
+            res_total = requests.post(GAS_URL, json={"action": "check_total"}).json()
+            if res_total.get("status") == "success":
+                t = res_total.get("grandTotalData", {})
+                st.success("📊 工場全体の純粋な各工程合計数の集計が完了しました！")
+                
+                st.write(f"・棹カット 合計: **{t.get('katto', 0)}** 個")
+                st.write(f"・枠組み 合計: **{t.get('waku', 0)}** 個")
+                st.write(f"・スペーサー 合計: **{t.get('spacer', 0)}** 個")
+                st.write(f"・中身セット 合計: **{t.get('nakami', 0)}** 個")
+                st.write(f"・金具打ち 合計: **{t.get('kanagu', 0)}** 個")
+                st.write(f"・仕上げ 合計: **{t.get('shiage', 0)}** 個")
+                st.write(f"・完成 合計: **{t.get('kanryo', 0)}** 個")
+                
