@@ -65,39 +65,46 @@ with col_cnt:
 
 st.markdown("### 📦 バーコードスキャン位置")
 
-# スキャナー連動フォーム（確定ボタンなしでEnter自動送信）
-with st.form(key="scan_form", clear_on_submit=True):
-    jan_input = st.text_input("スキャナーのカーソルをここに合わせてスキャンしてください（読み込むと自動送信されます）", value="")
-    st.form_submit_button(label="送信", disabled=True, type="primary")
+# スキャナーが読み込んだデータを確実に保持するための、コールバック関数の導入
+def handle_scan():
+    raw_jan = st.session_state["jan_barcode_input_field"]
+    if raw_jan:
+        payload = {
+            "janCode": raw_jan,
+            "status": selected_proc,
+            "count": selected_count,
+            "user": selected_user,
+            "action": "register"
+        }
+        try:
+            res = requests.post(GAS_URL, json=payload)
+            res_data = res.json()
+            if res_data.get("status") == "success":
+                st.session_state["cached_res"] = res_data
+                st.session_state["last_scanned_jan"] = raw_jan
+                st.session_state["current_item_name"] = res_data.get("itemName", "商品名未設定")
+            elif res_data.get("status") == "qty_mismatch":
+                st.warning(f"警告: {res_data.get('message')}")
+            else:
+                st.error(f"エラー: {res_data.get('message')}")
+        except Exception as e:
+            st.error(f"通信失敗: {e}")
+        
+        # 連続スキャンのため、送信が完了したタイミングで入力ボックスの中身だけを消去
+        st.session_state["jan_barcode_input_field"] = ""
 
-# スキャナーが読み込んだ瞬間に実行
-if jan_input:
-    payload = {
-        "janCode": jan_input,
-        "status": selected_proc,
-        "count": selected_count,
-        "user": selected_user,
-        "action": "register"
-    }
-    try:
-        res = requests.post(GAS_URL, json=payload)
-        res_data = res.json()
-        if res_data.get("status") == "success":
-            st.session_state["cached_res"] = res_data
-            st.session_state["last_scanned_jan"] = jan_input
-            st.session_state["current_item_name"] = res_data.get("itemName", "商品名未設定")
-        elif res_data.get("status") == "qty_mismatch":
-            st.warning(f"警告: {res_data.get('message')}")
-        else:
-            st.error(f"エラー: {res_data.get('message')}")
-    except Exception as e:
-        st.error(f"通信失敗: {e}")
+# スキャンを即座に認識し、ループを防ぐ専用のテキスト入力方式
+st.text_input(
+    "スキャナーのカーソルをここに合わせてスキャンしてください（読み込むと自動送信されます）", 
+    key="jan_barcode_input_field", 
+    on_change=handle_scan
+)
 
-# ーーー 💡 【ご要望①】JANを読み込んだ時点で即座に商品名が最優先で出るボックス ーーー
+# ーーー 💡 【即時連動】JANを読み込んだ時点で即座に商品名が最優先で出るボックス ーーー
 if st.session_state["current_item_name"]:
     st.markdown(
         f"""
-        <div style="background-color: #eaf2ff; padding: 15px; border-left: 5px solid #2b6cb0; border-radius: 4px; margin-top: 10px; margin-bottom: 10px;">
+        <div style="background-color: #eaf2ff; padding: 15px; border-left: 5px solid #2b6cb0; border-radius: 4px; margin-top: 15px; margin-bottom: 10px;">
             <p style="margin: 0; font-size: 14px; color: #4a5568; font-weight: bold;">🔍 読み込み中のアイテム（JAN: {st.session_state['last_scanned_jan']}）</p>
             <h2 style="margin: 5px 0 0 0; color: #2b6cb0; font-weight: bold;">{st.session_state['current_item_name']}</h2>
         </div>
@@ -105,7 +112,7 @@ if st.session_state["current_item_name"]:
         unsafe_allow_html=True
     )
 
-# ーーー 💡 【ご要望②】「在庫状況を表示」ボタンに名称変更 ーーー
+# ーーー 💡 【ご要望】「在庫状況を表示」ボタンに名称変更 ーーー
 if st.button("📊 在庫状況を表示（最新データに更新）", key="btn_show_and_reload_stock"):
     if st.session_state["last_scanned_jan"]:
         try:
