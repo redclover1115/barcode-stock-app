@@ -65,7 +65,7 @@ with col_cnt:
 
 st.markdown("### 📦 バーコードスキャン位置")
 
-# スキャナーが読み込んだデータを確実に保持するための、コールバック関数の導入
+# スキャナー読み込み時のバックエンド高速処理
 def handle_scan():
     raw_jan = st.session_state["jan_barcode_input_field"]
     if raw_jan:
@@ -90,50 +90,27 @@ def handle_scan():
         except Exception as e:
             st.error(f"通信失敗: {e}")
         
-        # 連続スキャンのため、送信が完了したタイミングで入力ボックスの中身だけを消去
+        # 連続スキャンのため入力フィールドを自動クリア
         st.session_state["jan_barcode_input_field"] = ""
 
-# スキャンを即座に認識し、ループを防ぐ専用のテキスト入力方式
+# スキャン位置の入力欄
 st.text_input(
     "スキャナーのカーソルをここに合わせてスキャンしてください（読み込むと自動送信されます）", 
     key="jan_barcode_input_field", 
     on_change=handle_scan
 )
 
-# ーーー 💡 【即時連動】JANを読み込んだ時点で即座に商品名が最優先で出るボックス ーーー
+# ーーー 💡 スキャン後、通常の文字サイズでシンプルに商品名を表示 ーーー
 if st.session_state["current_item_name"]:
-    st.markdown(
-        f"""
-        <div style="background-color: #eaf2ff; padding: 15px; border-left: 5px solid #2b6cb0; border-radius: 4px; margin-top: 15px; margin-bottom: 10px;">
-            <p style="margin: 0; font-size: 14px; color: #4a5568; font-weight: bold;">🔍 読み込み中のアイテム（JAN: {st.session_state['last_scanned_jan']}）</p>
-            <h2 style="margin: 5px 0 0 0; color: #2b6cb0; font-weight: bold;">{st.session_state['current_item_name']}</h2>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+    st.write(f"**🔍 選択中のアイテム (JAN: {st.session_state['last_scanned_jan']}) ： {st.session_state['current_item_name']}**")
 
-# ーーー 💡 【ご要望】「在庫状況を表示」ボタンに名称変更 ーーー
-if st.button("📊 在庫状況を表示（最新データに更新）", key="btn_show_and_reload_stock"):
-    if st.session_state["last_scanned_jan"]:
-        try:
-            res = requests.post(GAS_URL, json={"janCode": st.session_state["last_scanned_jan"], "action": "check"})
-            res_data = res.json()
-            if res_data.get("status") == "success":
-                st.session_state["cached_res"] = res_data
-                st.session_state["current_item_name"] = res_data.get("itemName", "商品名未設定")
-                st.success("最新の在庫状況を表示しました。")
-        except Exception as e:
-            st.error(f"在庫状況の取得に失敗しました: {e}")
-    else:
-        st.warning("まだバーコードがスキャンされていません。先に上の入力位置でスキャンを行ってください。")
-
-# ボタン押下時、またはキャッシュ保持時にメーターを表示
+# ーーー 💡 ボタンなしで、スキャン時に在庫メーターを即座に自動表示 ーーー
 if st.session_state["cached_res"]:
     display_stock_only(st.session_state["cached_res"])
 
-# =========================================================
-# ⚙️ ２．手動数量修正エリア
-# =========================================================
+// =========================================================
+// ⚙️ ２．手動数量修正エリア
+// =========================================================
 st.markdown("---")
 st.markdown("### 🔧 ２．手動での在庫数量修正・変更")
 
