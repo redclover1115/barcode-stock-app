@@ -69,14 +69,19 @@ with col_cnt:
 
 st.markdown("### 📦 バーコードスキャン位置")
 
-# 【エラー対策】送信完了時に「確実に自動でクリア」するための確実な入れ物（form）を用意
+# エラーを完全に防ぎつつ一発登録を実現するため、すべてを1つのフォーム内にきれいに並べます
 with st.form(key="main_scan_form", clear_on_submit=True):
-    jan_input = st.text_input("スキャナーのカーソルをここに合わせてスキャンしてください（読み込むと現在の在庫情報を表示します）", value="")
-    # フォーム内のEnterを検知させて画面に表示を出すためだけの隠しボタン
-    submit_scan = st.form_submit_button(label="🔍 データを読み込む", type="secondary")
+    jan_input = st.text_input("スキャナーのカーソルをここに合わせてスキャンしてください", value="")
+    
+    # 💡 【重要改良】ボタンを真横に綺麗に並べるための2つのカラムを作成
+    col_btn_read, col_btn_reg = st.columns(2)
+    with col_btn_read:
+        submit_scan = st.form_submit_button(label="🔍 データを読み込む（在庫確認用）", type="secondary")
+    with col_btn_reg:
+        submit_register = st.form_submit_button(label="📥 移動登録を実行する（直接上書き用）", type="primary")
 
-# バーコードがスキャンされた、または読み込みボタンが押された時の処理
-if (submit_scan or jan_input) and jan_input:
+# 【パターンA】「データを読み込む」が押されたか、JANが手動入力・スキャンされた場合（確認モード）
+if submit_scan and jan_input:
     try:
         res = requests.post(GAS_URL, json={"janCode": jan_input, "action": "check"})
         res_data = res.json()
@@ -91,20 +96,14 @@ if (submit_scan or jan_input) and jan_input:
     except Exception as e:
         st.error(f"データ取得失敗: {e}")
 
-# ーーー スキャンした時点で「商品名」と「在庫メーター」が即座に出るエリア ーーー
-if st.session_state["current_item_name"]:
-    st.write(f"**🔍 選択中のアイテム (JAN: {st.session_state['last_scanned_jan']}) ： {st.session_state['current_item_name']}**")
-
-if st.session_state["cached_res"]:
-    display_stock_only(st.session_state["cached_res"])
-    
-    st.markdown(" ")
-    # 移動登録を実行する確定ボタン
-    if st.button("📥 この内容で移動登録を実行する", key="btn_execute_real_register", type="primary"):
+# 【パターンB】「移動登録を実行する」が直接押された場合の処理（確認不要の一発高速モード）
+if submit_register:
+    if not jan_input:
+        st.error("バーコード入力欄が空っぽです。スキャンするかJANコードを入力してください。")
+    else:
         send_proc = "完成" if selected_proc == "受注生産品完成在庫" else selected_proc
-        
         payload = {
-            "janCode": st.session_state["last_scanned_jan"],
+            "janCode": jan_input,
             "status": send_proc,
             "count": selected_count,
             "user": selected_user,
@@ -117,12 +116,12 @@ if st.session_state["cached_res"]:
                 if res_data.get("status") == "success":
                     st.success(f"🎉 登録完了: 【{res_data.get('itemName')}】を「{selected_proc}」に {selected_count} 個登録しました。")
                     
-                    # 安全に入力欄と商品表示キャッシュを消去する
+                    # セッションデータを綺麗にリセットして次のスキャンに備える
                     st.session_state["last_scanned_jan"] = ""
                     st.session_state["current_item_name"] = ""
                     st.session_state["cached_res"] = None
                     
-                    # 完全に初期状態に戻して次のスキャンを待ち受ける
+                    # 画面を完全にリフレッシュして次のスキャンを待ち受ける
                     st.rerun()
                     
                 elif res_data.get("status") == "qty_mismatch":
@@ -131,6 +130,13 @@ if st.session_state["cached_res"]:
                     st.error(f"エラー: {res_data.get('message')}")
         except Exception as e:
             st.error(f"通信失敗: {e}")
+
+# ーーー 過去のキャッシュがあれば、現在選択中のアイテム名とメーターを表示 ーーー
+if st.session_state["current_item_name"]:
+    st.write(f"**🔍 選択中のアイテム (JAN: {st.session_state['last_scanned_jan']}) ： {st.session_state['current_item_name']}**")
+
+if st.session_state["cached_res"]:
+    display_stock_only(st.session_state["cached_res"])
 
 # =========================================================
 # ２．手動での在庫数量修正・変更
@@ -145,14 +151,16 @@ with col_modify:
     selected_modify_count = create_secure_drum("修正後の数量を選択", counts_modify, "count_modify_select", default_idx=0)
 
 if st.button("🚨 選択中の工程の数量をこの値に上書き修正する", key="execute_modify_action_btn"):
-    if not st.session_state["last_scanned_jan"]:
-        st.error("先に上の欄でバーコードスキャンを行って商品を特定してください。")
+    # 手動修正時は、確認モードで読み込まれたセッションのJANコードを基準にします
+    target_jan = st.session_state["last_scanned_jan"]
+    if not target_jan:
+        st.error("先に上の欄で『データを読み込む』ボタンを一度押して、対象の商品を特定してください。")
     else:
         modified_user_name = f"{selected_user} [{selected_reason}]"
         send_proc = "完成" if selected_proc == "受注生産品完成在庫" else selected_proc
         
         payload = {
-            "janCode": st.session_state["last_scanned_jan"],
+            "janCode": target_jan,
             "status": send_proc, 
             "count": selected_modify_count,
             "user": modified_user_name,
