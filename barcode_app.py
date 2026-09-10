@@ -7,12 +7,12 @@ st.write("7工程ジャンプ完全対応・高速サクサク軽量化モデル
 GAS_URL = "https://script.google.com/macros/s/AKfycbwNTMZAQ5edee04wb3zMtWPnMqjN8guEJQCG-zYOBQdvpyxvc7K5VoRmGiO6bZxImJy/exec"
 
 users = ["吉本", "塚越", "岡本", "中島", "関口", "石森", "堀越", "田代", "塩原", "吉田", "杉山", "南雲", "A", "B", "アルミ", "アクリル"]
-# 「出庫」を工程の選択肢に正式追加
 processes = ["棹カット", "枠組み", "スペーサー加工", "中身セット", "金具打ち", "仕上げ", "完成", "出庫"]
 counts_reg = [i for i in range(1, 101)]
 counts_modify = [i for i in range(0, 501)]
 counts_reason = [i for i in range(0, 101)]
 
+# セッション状態の初期化
 if "last_scanned_jan" not in st.session_state:
     st.session_state["last_scanned_jan"] = ""
 if "cached_res" not in st.session_state:
@@ -62,10 +62,14 @@ with col_cnt:
     selected_count = create_secure_drum("③ 数量を選択", counts_reg, "count_select_main", default_idx=0)
 
 st.markdown("### 📦 バーコードスキャン位置")
-jan_input = st.text_input("スキャナーのカーソルをここに合わせてスキャンしてください", key="jan_barcode_input")
 
-# 【1】JANコード通常スキャン登録時の処理
-if jan_input:
+# フォーム機能を使って、Enterが押された瞬間だけ安全に通信を走らせる仕組みに変更
+with st.form(key="scan_form", clear_on_submit=True):
+    jan_input = st.text_input("スキャナーのカーソルをここに合わせてスキャンしてください", value="")
+    submit_button = st.form_submit_button(label="スキャン確定（手動入力用）", help="スキャナー使用時は自動で送信されます")
+
+# スキャナーが読み込んだ（またはフォームが送信された）時の処理
+if submit_button and jan_input:
     payload = {
         "janCode": jan_input,
         "status": selected_proc,
@@ -86,24 +90,21 @@ if jan_input:
             st.error(f"エラー: {res_data.get('message')}")
     except Exception as e:
         st.error(f"通信失敗: {e}")
-    st.rerun()
 
 # 直近のスキャン結果メーターを表示
 if st.session_state["cached_res"]:
     display_stock_only(st.session_state["cached_res"])
 
 # =========================================================
-# ⚙️ ２の処理内容：【手動数量修正エリア】（スキャン後に有効化）
+# ⚙️ ２の処理内容：【手動数量修正エリア】
 # =========================================================
 st.markdown("---")
 st.markdown("### 🔧 ２．手動での在庫数量修正・変更")
 
 col_reason, col_modify = st.columns(2)
 with col_reason:
-    # 定義されていた counts_reason をここで活用
     selected_reason = create_secure_drum("移動修正理由を選択 (予備カウント)", counts_reason, "reason_modify_select")
 with col_modify:
-    # 定義されていた counts_modify をここで活用
     selected_modify_count = create_secure_drum("修正後の数量を選択 (0〜500)", counts_modify, "count_modify_select", default_idx=0)
 
 if st.button("🚨 選択中の工程の数量をこの値に上書き修正する", key="execute_modify_action_btn"):
@@ -112,7 +113,7 @@ if st.button("🚨 選択中の工程の数量をこの値に上書き修正す�
     else:
         payload = {
             "janCode": st.session_state["last_scanned_jan"],
-            "status": selected_proc, # 上のメインドラムで選ばれている工程の数量を上書きします
+            "status": selected_proc, 
             "count": selected_modify_count,
             "user": selected_user,
             "action": "modify"
@@ -127,7 +128,6 @@ if st.button("🚨 選択中の工程の数量をこの値に上書き修正す�
                 st.error(f"修正エラー: {res_data.get('message')}")
         except Exception as e:
             st.error(f"通信失敗: {e}")
-        st.rerun()
 
 # =========================================================
 # 📊 ３の処理内容：【希望時のみ動作する全工程の合計値算出機能】
@@ -145,7 +145,6 @@ if st.button("📈 全商品の在庫合計値を集計して算出する", key=
                 g = res_data["grandTotalData"]
                 st.markdown("#### 🧮 算出された各工程の現在合計数")
                 
-                # スッキリ見せるために4列×2行で集計結果を表示
                 m1, m2, m3, m4 = st.columns(4)
                 m1.metric("棹カット 合計", f"{g.get('katto', 0)} 個")
                 m2.metric("枠組み 合計", f"{g.get('waku', 0)} 個")
