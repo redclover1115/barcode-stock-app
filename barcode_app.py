@@ -38,7 +38,7 @@ def create_secure_drum(label, options, key, default_idx=0):
     selected_value = st.selectbox(f"**{label}**", options, index=default_idx, key=key)
     return selected_value
 
-# 📊 【新仕様】登録したJANコード単品の「7工程内訳」と「見込データ3点」を表示する関数
+# 📊 【勘違い防止版】登録したJANコード単品の「7工程内訳」と「見込データ」を表示する関数
 def display_stock_only(res_data, title="📊 現在の在庫状況"):
     st.write(f"#### {title}")
     s = res_data.get("stockData", {})
@@ -55,18 +55,29 @@ def display_stock_only(res_data, title="📊 現在の在庫状況"):
     
     st.markdown("---")
     
-    # 【修正ポイント】ここに出てくる3枚のカードも、スキャンしたJANコード（個別列）のデータのみを表示します
     st.write("**◆ 今回のアイテムの見込生産・棚在庫の連動状況**")
     t1, t2, t3 = st.columns(3)
     
-    # アイテム個別のS列(完成品)、V列(見込在庫)、W列(引当可能数)の値を取得して表示
-    tana_zaiko = s.get("kanryo", 0) # 個別の完成品棚在庫(P列と同じですが、個別判定用に連動)
-    mikomi_stock = res_data.get("mikomiStock", 0)   # 個別アイテムのV列の数値
-    mikomi_hikiate = res_data.get("mikomiHikiate", 0) # 個別アイテムのW列の数値
+    tana_zaiko = s.get("kanryo", 0) 
+    m_stock = res_data.get("mikomiStock", "0")
+    m_hikiate = res_data.get("mikomiHikiate", "0")
     
-    t1.metric("📦 生産棚在庫 ", f"{tana_zaiko} 個")
-    t2.metric("📈 見込生産在庫数 ", f"{mikomi_stock} 個")
-    t3.metric("⏳ 見込生産引当可能数 ", f"{mikomi_hikiate} 個")
+    # ーーー 💡 現場の勘違いを防ぐ自動表記判別ロジック ーーー
+    def format_disp_value(val):
+        val_str = str(val).trim() if hasattr(str(val), 'trim') else str(val).strip()
+        if val_str == "0" or val_str == "" or val_str == "0.0":
+            return "無し" # 空欄や0のときは親切に「無し」と出す
+        elif "受注品" in val_str:
+            return "受注品" # 受注品の文字ならそのまま
+        else:
+            return f"{val_str} 個" # 数字が入っているときだけ「〇〇 個」と出す
+            
+    disp_stock = format_disp_value(m_stock)
+    disp_hikiate = format_disp_value(m_hikiate)
+    
+    t1.metric("📦 生産棚在庫 (完成品)", f"{tana_zaiko} 個")
+    t2.metric("📈 見込生産在庫数 (V列)", disp_stock)
+    t3.metric("⏳ 見込生産引当可能数 (W列)", disp_hikiate)
 
 # メイン画面：担当者選択
 user_name = create_secure_drum("👤 担当者選択（スクロール選択）", users, "v_user", 0)
@@ -81,7 +92,6 @@ st.subheader("📥 1. 通常の数量加算（新規登録）")
 status = create_secure_drum("🚩 移動先の工程を選択（スクロール）", processes, "v_status_reg", 0)
 jan_code = st.text_input("📋 加算するバーコード（JAN）をスキャン：", key="jan_reg_input")
 
-# JANコードが入力されたら、自動でそのアイテムのみの在庫状況を読み込む
 if jan_code:
     with st.spinner("スプレッドシートから現在の進捗を先読み中..."):
         try:
@@ -119,7 +129,6 @@ if st.button("🎰 上記の内容で通常加算登録をする", key="btn_regi
             except Exception as e:
                 st.error(f"通信エラー: {e}")
 
-# 🚨 数量不一致エラー時のマイナス内訳
 if st.session_state.get("mismatch_detected", False):
     d = st.session_state["prev_details"]
     st.error(f"⚠️ 前工程【{d['prevStatus']}】にあった数（{d['prevCount']}個）と、今回移動する数（{d['inputCount']}個）が合いません。")
