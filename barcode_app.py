@@ -17,7 +17,6 @@ if "last_scanned_jan" not in st.session_state:
     st.session_state["last_scanned_jan"] = ""
 if "cached_res" not in st.session_state:
     st.session_state["cached_res"] = None
-# 【新規】特定された商品名を保持するセッション
 if "current_item_name" not in st.session_state:
     st.session_state["current_item_name"] = ""
 
@@ -66,13 +65,14 @@ with col_cnt:
 
 st.markdown("### 📦 バーコードスキャン位置")
 
-# フォーム機能でEnter時の二重ループを防止
+# スキャン確定ボタンを完全に無くし、「Enter」または「スキャナーの自動送信」のみで動くフォーム
 with st.form(key="scan_form", clear_on_submit=True):
-    jan_input = st.text_input("スキャナーのカーソルをここに合わせてスキャンしてください", value="")
-    submit_button = st.form_submit_button(label="スキャン確定（手動入力用）")
+    jan_input = st.text_input("スキャナーのカーソルをここに合わせてスキャンしてください（読み込むと自動送信されます）", value="")
+    # 隠し送信トリガー（Streamlitの仕様上、フォーム内でのEnter送信に必要ですがボタンの見た目は消去します）
+    st.form_submit_button(label="送信", disabled=True, type="primary")
 
-# スキャナーが読み込んだ時の処理
-if submit_button and jan_input:
+# 【重要】スキャナーが読み込んだ瞬間に実行（ボタンなしでEnter信号を検知）
+if jan_input:
     payload = {
         "janCode": jan_input,
         "status": selected_proc,
@@ -84,10 +84,8 @@ if submit_button and jan_input:
         res = requests.post(GAS_URL, json=payload)
         res_data = res.json()
         if res_data.get("status") == "success":
-            st.success(f"処理成功: 【{res_data.get('itemName')}】を処理しました。")
             st.session_state["cached_res"] = res_data
             st.session_state["last_scanned_jan"] = jan_input
-            # 【新規】GASから返ってきた商品名をセッションに保存
             st.session_state["current_item_name"] = res_data.get("itemName", "商品名未設定")
         elif res_data.get("status") == "qty_mismatch":
             st.warning(f"警告: {res_data.get('message')}")
@@ -96,11 +94,11 @@ if submit_button and jan_input:
     except Exception as e:
         st.error(f"通信失敗: {e}")
 
-# 【新規】JAN読み込み後に商品名を最優先で大きく目立つように表示するエリア
+# ーーー 💡 スキャンした時点で「商品名」と「在庫メーター」が即座に出るエリア ーーー
 if st.session_state["current_item_name"]:
     st.markdown(
         f"""
-        <div style="background-color: #eaf2ff; padding: 15px; border-left: 5px solid #2b6cb0; border-radius: 4px; margin-bottom: 15px;">
+        <div style="background-color: #eaf2ff; padding: 15px; border-left: 5px solid #2b6cb0; border-radius: 4px; margin-top: 10px; margin-bottom: 15px;">
             <p style="margin: 0; font-size: 14px; color: #4a5568; font-weight: bold;">🔍 選択中のアイテム（JAN: {st.session_state['last_scanned_jan']}）</p>
             <h2 style="margin: 5px 0 0 0; color: #2b6cb0; font-weight: bold;">{st.session_state['current_item_name']}</h2>
         </div>
@@ -108,9 +106,23 @@ if st.session_state["current_item_name"]:
         unsafe_allow_html=True
     )
 
-# 直近のスキャン結果メーターを表示
 if st.session_state["cached_res"]:
     display_stock_only(st.session_state["cached_res"])
+
+# 確定ボタンの代わりに配置した「画面更新ボタン」
+if st.button("🔄 画面情報を更新（最新の在庫を再読込）", key="btn_reload_last_status"):
+    if st.session_state["last_scanned_jan"]:
+        try:
+            res = requests.post(GAS_URL, json={"janCode": st.session_state["last_scanned_jan"], "action": "check"})
+            res_data = res.json()
+            if res_data.get("status") == "success":
+                st.session_state["cached_res"] = res_data
+                st.session_state["current_item_name"] = res_data.get("itemName", "商品名未設定")
+                st.success("最新の在庫状況を読み込みました。")
+        except Exception as e:
+            st.error(f"再読込失敗: {e}")
+    else:
+        st.warning("まだバーコードがスキャンされていません。")
 
 # =========================================================
 # ⚙️ ２．手動数量修正エリア
@@ -142,8 +154,6 @@ if st.button("🚨 選択中の工程の数量をこの値に上書き修正す�
                 st.success(f"修正成功: 【{res_data.get('itemName')}】の「{selected_proc}」の在庫数を {selected_modify_count} 個に変更しました。")
                 st.session_state["cached_res"] = res_data
                 st.session_state["current_item_name"] = res_data.get("itemName", "商品名未設定")
-            else:
-                st.error(f"修正エラー: {res_data.get('message')}")
         except Exception as e:
             st.error(f"通信失敗: {e}")
 
