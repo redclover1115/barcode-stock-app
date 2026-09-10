@@ -4,7 +4,7 @@ import requests
 st.title("🎰 工程在庫管理スロットアプリ")
 st.write("7工程ジャンプ完全対応・高速サクサク軽量化モデル")
 
-GAS_URL = "https://google.com"
+GAS_URL = "https://script.google.com/macros/s/AKfycbwNTMZAQ5edee04wb3zMtWPnMqjN8guEJQCG-zYOBQdvpyxvc7K5VoRmGiO6bZxImJy/exec"
 
 users = ["吉本", "塚越", "岡本", "中島", "関口", "石森", "堀越", "田代", "塩原", "吉田", "杉山", "南雲", "A", "B", "アルミ", "アクリル"]
 processes = ["棹カット", "枠組み", "スペーサー加工", "中身セット", "金具打ち", "仕上げ", "完成", "出庫"]
