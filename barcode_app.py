@@ -7,7 +7,6 @@ st.markdown("### １．工程間移動登録")
 GAS_URL = "https://script.google.com/macros/s/AKfycbwNTMZAQ5edee04wb3zMtWPnMqjN8guEJQCG-zYOBQdvpyxvc7K5VoRmGiO6bZxImJy/exec"
 
 users = ["吉本", "塚越", "岡本", "中島", "関口", "石森", "堀越", "田代", "塩原", "吉田", "杉山", "南雲", "A", "B", "アルミ", "アクリル"]
-# 【改良】移動先の工程に「受注生産品完成在庫」を追加（内部処理はS列の「完成」に紐づきます）
 processes = ["棹カット", "枠組み", "スペーサー加工", "中身セット", "金具打ち", "仕上げ", "完成", "受注生産品完成在庫", "出庫"]
 counts_reg = [i for i in range(1, 101)]
 counts_modify = [i for i in range(0, 501)]
@@ -70,31 +69,27 @@ with col_cnt:
 
 st.markdown("### 📦 バーコードスキャン位置")
 
-# スキャンした瞬間に「まず現在の在庫を読み込んで確認する」ためのバックエンド関数
-def check_item_status():
-    raw_jan = st.session_state["jan_barcode_input_field"]
-    if raw_jan:
-        try:
-            res = requests.post(GAS_URL, json={"janCode": raw_jan, "action": "check"})
-            res_data = res.json()
-            if res_data.get("status") == "success":
-                st.session_state["cached_res"] = res_data
-                st.session_state["last_scanned_jan"] = raw_jan
-                st.session_state["current_item_name"] = res_data.get("itemName", "商品名未設定")
-            elif res_data.get("status") == "not_found":
-                st.error("入力されたJANコードはマスタに見つかりません。")
-                st.session_state["current_item_name"] = ""
-                st.session_state["cached_res"] = None
-        except Exception as e:
-            st.error(f"データ取得失敗: {e}")
+# 【エラー対策】送信完了時に「確実に自動でクリア」するための確実な入れ物（form）を用意
+with st.form(key="main_scan_form", clear_on_submit=True):
+    jan_input = st.text_input("スキャナーのカーソルをここに合わせてスキャンしてください（読み込むと現在の在庫情報を表示します）", value="")
+    # フォーム内のEnterを検知させて画面に表示を出すためだけの隠しボタン
+    submit_scan = st.form_submit_button(label="🔍 データを読み込む", type="secondary")
 
-# スキャン位置の入力欄
-# 登録完了時に文字がクリアされるよう、セッション状態「jan_barcode_input_field」と直接連動させます
-st.text_input(
-    "スキャナーのカーソルをここに合わせてスキャンしてください（読み込むと現在の在庫情報を表示します）", 
-    key="jan_barcode_input_field", 
-    on_change=check_item_status
-)
+# バーコードがスキャンされた、または読み込みボタンが押された時の処理
+if (submit_scan or jan_input) and jan_input:
+    try:
+        res = requests.post(GAS_URL, json={"janCode": jan_input, "action": "check"})
+        res_data = res.json()
+        if res_data.get("status") == "success":
+            st.session_state["cached_res"] = res_data
+            st.session_state["last_scanned_jan"] = jan_input
+            st.session_state["current_item_name"] = res_data.get("itemName", "商品名未設定")
+        elif res_data.get("status") == "not_found":
+            st.error("入力されたJANコードはマスタに見つかりません。")
+            st.session_state["current_item_name"] = ""
+            st.session_state["cached_res"] = None
+    except Exception as e:
+        st.error(f"データ取得失敗: {e}")
 
 # ーーー スキャンした時点で「商品名」と「在庫メーター」が即座に出るエリア ーーー
 if st.session_state["current_item_name"]:
@@ -104,8 +99,8 @@ if st.session_state["cached_res"]:
     display_stock_only(st.session_state["cached_res"])
     
     st.markdown(" ")
+    # 移動登録を実行する確定ボタン
     if st.button("📥 この内容で移動登録を実行する", key="btn_execute_real_register", type="primary"):
-        # 「受注生産品完成在庫」が選ばれている場合は、GAS側が対応している「完成」に名称を変換して送信
         send_proc = "完成" if selected_proc == "受注生産品完成在庫" else selected_proc
         
         payload = {
@@ -122,13 +117,12 @@ if st.session_state["cached_res"]:
                 if res_data.get("status") == "success":
                     st.success(f"🎉 登録完了: 【{res_data.get('itemName')}】を「{selected_proc}」に {selected_count} 個登録しました。")
                     
-                    # 【改良】登録が無事に終わったら、次の連続スキャンのためにすべてのセッションデータを綺麗に消去
-                    st.session_state["jan_barcode_input_field"] = ""
+                    # 安全に入力欄と商品表示キャッシュを消去する
                     st.session_state["last_scanned_jan"] = ""
                     st.session_state["current_item_name"] = ""
                     st.session_state["cached_res"] = None
                     
-                    # 画面を一瞬でリセットして入力フォーカスを戻す
+                    # 完全に初期状態に戻して次のスキャンを待ち受ける
                     st.rerun()
                     
                 elif res_data.get("status") == "qty_mismatch":
