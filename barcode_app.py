@@ -4,8 +4,8 @@ import requests
 st.title("🎰 工程在庫管理スロットアプリ")
 st.write("7工程ジャンプ完全対応・自動在庫先読みUIモデル")
 
-# 1. 共通GAS URL (ご自身のウェブアプリURLに差し替えてください)
-GAS_URL = "https://script.google.com/macros/s/AKfycbzqCJKbh31A1MD19mhbLyAhQa2LxN34zs2XxrEaCe64Gl-1uthsF7qzn89fh36J0FH1/exec"
+# 1. 共通GAS URL
+GAS_URL = "https://script.google.com/macros/s/AKfycbwNTMZAQ5edee04wb3zMtWPnMqjN8guEJQCG-zYOBQdvpyxvc7K5VoRmGiO6bZxImJy/exec"
 
 # リストの定義
 users = ["吉本", "塚越", "岡本", "中島", "関口", "石森", "堀越", "田代", "塩原", "吉田", "杉山", "南雲", "A", "B", "アルミ", "アクリル"]
@@ -38,7 +38,7 @@ def create_secure_drum(label, options, key, default_idx=0):
     selected_value = st.selectbox(f"**{label}**", options, index=default_idx, key=key)
     return selected_value
 
-# 📊 在庫・棚状況を表示する共通関数
+# 📊 【機能拡張版】在庫・棚状況を表示する共通関数（見込データ2点を追加）
 def display_stock_and_total(res_data, title="📊 現在の在庫状況"):
     st.write(f"#### {title}")
     s = res_data.get("stockData", {})
@@ -54,8 +54,17 @@ def display_stock_and_total(res_data, title="📊 現在の在庫状況"):
     c7.metric("完成", f"{s.get('kanryo',0)}個")
     
     st.markdown("---")
+    
+    # 【追加機能】前回までの「生産棚在庫」の真横に、見込生産の在庫数(V列)と引当可能数(W列)のカードを美しく配置
+    st.write("**◆ 見込生産・棚在庫の連動状況**")
+    t1, t2, t3 = st.columns(3)
     tana_zaiko = res_data.get("seisanTanaZaiko", 0)
-    st.metric("📦 生産棚在庫 (完成品合計)", f"{tana_zaiko} 個")
+    mikomi_stock = res_data.get("mikomiStock", 0)
+    mikomi_hikiate = res_data.get("mikomiHikiate", 0)
+    
+    t1.metric("📦 生産棚在庫 (完成品合計)", f"{tana_zaiko} 個")
+    t2.metric("📈 見込生産在庫数 (V列)", f"{mikomi_stock} 個")
+    t3.metric("⏳ 見込生産引当可能数 (W列)", f"{mikomi_hikiate} 個")
 
 # メイン画面：担当者選択
 user_name = create_secure_drum("👤 担当者選択（スクロール選択）", users, "v_user", 0)
@@ -177,20 +186,20 @@ if st.button("📊 工場全体の各工程合計数を集計する", key="btn_c
                 st.success("📊 工場全体の純粋な各工程合計数の集計が完了しました！")
                 
                 cols = st.columns(7)
-                cols[0].metric("棹カット 合計", f"{t.get('katto', 0)} 個")
-                cols[1].metric("枠組み 合計", f"{t.get('waku', 0)} 個")
-                cols[2].metric("スペーサー 合計", f"{t.get('spacer', 0)} 個")
-                cols[3].metric("中身セット 合計", f"{t.get('nakami', 0)} 個")
-                cols[4].metric("金具打ち 合計", f"{t.get('kanagu', 0)} 個")
-                cols[5].metric("仕上げ 合計", f"{t.get('shiage', 0)} 個")
-                cols[6].metric("完成 合計", f"{t.get('kanryo', 0)} 個")
+                cols.metric("棹カット 合計", f"{t.get('katto', 0)} 個")
+                cols.metric("枠組み 合計", f"{t.get('waku', 0)} 個")
+                cols.metric("スペーサー 合計", f"{t.get('spacer', 0)} 個")
+                cols.metric("中身セット 合計", f"{t.get('nakami', 0)} 個")
+                cols.metric("金具打ち 合計", f"{t.get('kanagu', 0)} 個")
+                cols.metric("仕上げ 合計", f"{t.get('shiage', 0)} 個")
+                cols.metric("完成 合計", f"{t.get('kanryo', 0)} 個")
                 
                 st.markdown("---")
                 
                 total_cols = st.columns(3)
-                total_cols[0].metric("🏭 各工程合計数(A)", f"{t.get('totalA', 0)} 個")
-                total_cols[1].metric("📦 生産課管理棚合計数(B)", f"{t.get('totalB', 0)} 個")
-                total_cols[2].metric("🧱 総合計(A+B)", f"{t.get('totalAB', 0)} 個")
+                total_cols.metric("🏭 各工程合計数(A)", f"{t.get('totalA', 0)} 個")
+                total_cols.metric("📦 生産課管理棚合計数(B)", f"{t.get('totalB', 0)} 個")
+                total_cols.metric("🧱 総合計(A+B)", f"{t.get('totalAB', 0)} 個")
                 
             else:
                 st.error(f"エラー: {res.get('message')}")
