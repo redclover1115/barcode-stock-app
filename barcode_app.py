@@ -61,9 +61,9 @@ def display_stock_and_total(res_data, title="📊 現在の在庫状況"):
     mikomi_stock = res_data.get("mikomiStock", 0)
     mikomi_hikiate = res_data.get("mikomiHikiate", 0)
     
-    t1.metric("📦 生産棚在庫 (完成品合計)", f"{tana_zaiko} 個")
-    t2.metric("📈 見込生産在庫数 (V列)", f"{mikomi_stock} 個")
-    t3.metric("⏳ 見込生産引当可能数 (W列)", f"{mikomi_hikiate} 個")
+    t1.metric("📦 生産棚在庫 ", f"{tana_zaiko} 個")
+    t2.metric("📈 見込生産在庫数 ", f"{mikomi_stock} 個")
+    t3.metric("⏳ 見込生産引当可能数 ", f"{mikomi_hikiate} 個")
 
 # メイン画面：担当者選択
 user_name = create_secure_drum("👤 担当者選択（スクロール選択）", users, "v_user", 0)
