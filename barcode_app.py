@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 
 st.title("🎰 工程在庫管理スロットアプリ")
-st.write("7工程ジャンプ完全対応・高速サクサク軽量化モデル")
+st.markdown("### １．工程間移動登録")
 
 GAS_URL = "https://script.google.com/macros/s/AKfycbwNTMZAQ5edee04wb3zMtWPnMqjN8guEJQCG-zYOBQdvpyxvc7K5VoRmGiO6bZxImJy/exec"
 
@@ -10,7 +10,7 @@ users = ["吉本", "塚越", "岡本", "中島", "関口", "石森", "堀越", "
 processes = ["棹カット", "枠組み", "スペーサー加工", "中身セット", "金具打ち", "仕上げ", "完成", "出庫"]
 counts_reg = [i for i in range(1, 101)]
 counts_modify = [i for i in range(0, 501)]
-counts_reason = [i for i in range(0, 101)]
+reasons_modify = ["不良", "先行出荷", "その他"]
 
 # セッション状態の初期化
 if "last_scanned_jan" not in st.session_state:
@@ -52,7 +52,6 @@ def display_stock_only(res_data, title="📊 現在の在庫状況"):
     c7.metric("完成", f"{s.get('kanryo',0)}個")
     
     st.markdown("---")
-    # 【改良】(V列)などの表記を消し、ご指定通りの3項目をスッキリと並び替え
     st.write(
         f"🔸 **受注生産品完成在庫**: {s.get('kanryo',0)} 個  /  "
         f"🔸 **見込生産品在庫**: {res_data.get('mikomiStock', '0')} 個  /  "
@@ -113,26 +112,29 @@ if st.session_state["cached_res"]:
     display_stock_only(st.session_state["cached_res"])
 
 # =========================================================
-# ２．手動数量修正エリア
+# ２．手動での在庫数量修正・変更
 # =========================================================
 st.markdown("---")
 st.markdown("### 🔧 ２．手動での在庫数量修正・変更")
 
 col_reason, col_modify = st.columns(2)
 with col_reason:
-    selected_reason = create_secure_drum("移動修正理由を選択 (予備カウント)", counts_reason, "reason_modify_select")
+    selected_reason = create_secure_drum("移動修正理由を選択", reasons_modify, "reason_modify_select")
 with col_modify:
-    selected_modify_count = create_secure_drum("修正後の数量を選択 (0〜500)", counts_modify, "count_modify_select", default_idx=0)
+    # 【改良】ラベルから（0〜500）の注記を完全に削除しました
+    selected_modify_count = create_secure_drum("修正後の数量を選択", counts_modify, "count_modify_select", default_idx=0)
 
 if st.button("🚨 選択中の工程の数量をこの値に上書き修正する", key="execute_modify_action_btn"):
     if not st.session_state["last_scanned_jan"]:
         st.error("先に上の欄でバーコードスキャンを行って商品を特定してください。")
     else:
+        modified_user_name = f"{selected_user} [{selected_reason}]"
+        
         payload = {
             "janCode": st.session_state["last_scanned_jan"],
             "status": selected_proc, 
             "count": selected_modify_count,
-            "user": selected_user,
+            "user": modified_user_name,
             "action": "modify"
         }
         try:
