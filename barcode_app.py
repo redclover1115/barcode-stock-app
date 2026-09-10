@@ -52,7 +52,12 @@ def display_stock_only(res_data, title="📊 現在の在庫状況"):
     c7.metric("完成", f"{s.get('kanryo',0)}個")
     
     st.markdown("---")
-    st.write(f"💡 受注生産品完成在庫 (V列): **{res_data.get('mikomiStock', '0')}** 個  /  🚚 出庫数累計 (X列): **{s.get('shukko',0)}** 個")
+    # 【改良】(V列)などの表記を消し、ご指定通りの3項目をスッキリと並び替え
+    st.write(
+        f"🔸 **受注生産品完成在庫**: {s.get('kanryo',0)} 個  /  "
+        f"🔸 **見込生産品在庫**: {res_data.get('mikomiStock', '0')} 個  /  "
+        f"🔸 **引当可能数**: {res_data.get('mikomiHikiate', '0')} 個"
+    )
 
 # ーーー ① 通常の登録用メイン3連ドラム ーーー
 col_user, col_proc, col_cnt = st.columns(3)
@@ -90,7 +95,6 @@ def handle_scan():
         except Exception as e:
             st.error(f"通信失敗: {e}")
         
-        # 連続スキャンのため入力フィールドを自動クリア
         st.session_state["jan_barcode_input_field"] = ""
 
 # スキャン位置の入力欄
@@ -104,7 +108,7 @@ st.text_input(
 if st.session_state["current_item_name"]:
     st.write(f"**🔍 選択中のアイテム (JAN: {st.session_state['last_scanned_jan']}) ： {st.session_state['current_item_name']}**")
 
-# ーーー ボタンなしで、スキャン時に在庫メーターを即座に自動表示 ーーー
+# ーーー スキャン時に在庫メーターと3つの在庫数を自動表示 ーーー
 if st.session_state["cached_res"]:
     display_stock_only(st.session_state["cached_res"])
 
@@ -122,7 +126,7 @@ with col_modify:
 
 if st.button("🚨 選択中の工程の数量をこの値に上書き修正する", key="execute_modify_action_btn"):
     if not st.session_state["last_scanned_jan"]:
-        st.error("先に上の欄でバーコードをスキャンして、対象の商品を特定してください。")
+        st.error("先に上の欄でバーコードスキャンを行って商品を特定してください。")
     else:
         payload = {
             "janCode": st.session_state["last_scanned_jan"],
